@@ -1,0 +1,86 @@
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Secrets & local env (не коммитить ключи) ---
+.env
+.env.*
+!.env.example
+*.pem
+
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.hypothesis/
+
+# --- Flutter & Dart (mobile/) ---
+**/doc/api/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+**/build/
+**/flutter_export_environment.sh
+**/Flutter.podspec
+**/Generated.xcconfig
+**/flutter-plugins
+**/flutter-plugins-dependencies
+**/Flutter-Generated.xcconfig
+*.iml
+
+# Android
+**/android/**/local.properties
+**/android/.gradle/
+**/android/captures/
+**/android/**/GeneratedPluginRegistrant.java
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/android/key.properties
+*.jks
+*.keystore
+
+# iOS / macOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/macos/Flutter/ephemeral/
+
+# Web
+**/web/flutter_service_worker.js
+
+# --- IDE & инструменты ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Логи и временные файлы ---
+*.log
+*.tmp
+*.temp
+.cache/
+
+# --- Docker / локальные артефакты (при необходимости раскомментируйте) ---
+# *.local

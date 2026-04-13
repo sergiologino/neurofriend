@@ -1,0 +1,21 @@
+# История изменений (AI-память)
+
+- **2026-04-13:** Этап 6 (первая итерация): семантическая память — Qdrant-коллекция при старте, OpenAI embeddings, индексация реплик и intro, retrieval в `generate_reply`; `SEMANTIC_MEMORY_ENABLED`, `QDRANT_*`, `EMBEDDING_*`; заготовка `memory_consolidation.py`. Документы: `ARCHITECTURE.md`, `DECISIONS.md` D-010, `ROADMAP.md` этап 6.
+- **2026-04-13:** Flutter: экран создания — карточки пресетов с `genderLabelRu` и усечённой `life_legend`; модель `PersonalityPreset` парсит `gender_style` / `life_legend`.
+- **2026-04-13:** Цель SRS «личность, не опросник»: пресеты дополнены `gender_style` и `life_legend`; при создании с пресетом они попадают в `IdentityCore`; системный промпт LLM — блок естественности диалога + легенда; intro без обязательного вопроса в конце. `DECISIONS.md` D-009, `PROJECT_OVERVIEW.md`.
+- **2026-04-13:** Различие пресетов: в JSON — `character_prompt`, темперамент и стили; при создании передаётся `preset_id` (клиент), данные в `IdentityCore`. Память диалога: в промпт LLM добавляется недавний транскрипт активного треда (`conversation_prompt.build_recent_transcript_text`). Старые нейродрузья без `character_voice` — сбросить и создать заново с пресетом.
+- **2026-04-13:** Этап 5 (часть): `GET /v1/meta/personality-presets`, `backend/app/data/personality_presets.json`, тест `test_presets.py`; Flutter — выбор пресета на экране создания; `package-data` для JSON в `pyproject.toml`.
+- **2026-04-13:** Backend: `utc_naive_now()` для полей `TIMESTAMP WITHOUT TIME ZONE` (asyncpg не принимал aware datetime); модели и `affect_lite` / `chat_thread_service` обновлены.
+- **2026-04-13:** Backend: при ошибке OpenAI при создании нейродруга/ответе — fallback-текст вместо 500 (`llm_orchestrator`); клиент: `formatDioError` для сообщений FastAPI.
+- **2026-04-13:** `mobile/pubspec.yaml`: `record` обновлён до **^6.2.0** (исправление ошибок компиляции `record_linux` / `hasPermission` при сборке Windows); в `LOCAL_SETUP_WINDOWS.md` — режим разработчика, `flutter clean`, пояснение по симлинкам.
+- **2026-04-13:** Клиент Flutter (MVP): экран дома — создание нейродруга, чат, запись WAV + TTS, инспектор debug API; `mobile/pubspec.yaml`, `mobile/README.md`, `TODO.md` / `CURRENT_STATE.md` обновлены.
+- **2026-04-13:** `LOCAL_SETUP_WINDOWS.md`: `flutter run` только из `mobile` (pubspec.yaml); Android SDK cmdline-tools + `flutter doctor --android-licenses`.
+- **2026-04-13:** `LOCAL_SETUP_WINDOWS.md`: для `flutter run -d windows` — Visual Studio 2022 + workload C++ desktop; альтернатива `flutter run -d chrome`.
+- **2026-04-13:** `LOCAL_SETUP_WINDOWS.md`: после смены пути к проекту пересоздавать `backend\.venv` (ошибка launcher `uvicorn`/`alembic` со старым путём).
+- **2026-04-13:** Flutter: добавлен `mobile/lib/core/api_config.dart`, placeholder показывает `kApiBaseUrl`; в `LOCAL_SETUP_WINDOWS.md` — предупреждение о символе `!` в пути (Windows desktop) и про вставку Dart не в PowerShell.
+- **2026-04-13:** Добавлена инструкция локального запуска для Windows: `docs/LOCAL_SETUP_WINDOWS.md`; ссылка в корневом `README.md`.
+- **2026-04-13:** Синхронизация с контрактом `docs/ai/*`: добавлен рабочий бэклог `TODO.md`, обновлены дата и ссылка в `CURRENT_STATE.md`; backend `pytest` — 5 passed.
+- **2026-04-12:** Инициализированы `docs/ai/*`, зафиксированы обзор, архитектура (Flutter web+mобильные + FastAPI monolith), решения D-001–D-003; репозиторий кода ещё пуст.
+- **2026-04-12:** Добавлен `ROADMAP.md` (этапы), решения D-004–D-006: голос OpenAI Whisper+TTS с возможностью замены, чат как не-SoT с лимитом 500/архив/10 carryover, UI отладки отношений и событий.
+- **2026-04-12:** Реализован каркас backend (FastAPI, модели, Alembic, голосовой пайплайн, чат-транскрипт с rollover), debug API, placeholder mobile; pytest 5 тестов зелёные; Docker-сборка не проверена (daemon off).
+- **2026-04-12:** Зафиксировано (D-008, `infra/README.md`): для dev приоритетен локальный PostgreSQL; Docker-Postgres опционален.

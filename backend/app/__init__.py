@@ -1,0 +1,1 @@
+"""NeuroFriend backend application package."""

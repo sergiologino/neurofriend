@@ -1,0 +1,56 @@
+# Postgres в compose опционален, если на машине уже есть локальный PostgreSQL — см. infra/README.md
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: neurofriend
+      POSTGRES_PASSWORD: neurofriend
+      POSTGRES_DB: neurofriend
+    ports:
+      - "5432:5432"
+    volumes:
+      - neurofriend_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neurofriend -d neurofriend"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - neurofriend_redis:/data
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - neurofriend_qdrant:/qdrant/storage
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://neurofriend:neurofriend@postgres:5432/neurofriend
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+
+volumes:
+  neurofriend_pg:
+  neurofriend_redis:
+  neurofriend_qdrant:
