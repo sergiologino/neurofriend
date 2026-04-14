@@ -110,7 +110,63 @@ Backend при старте читает файл **`.env` из папки `back
 
 Если порт **6333** уже занят другим приложением, измените проброс в `infra/docker-compose.yml` (например `"6335:6333"`) и укажите в `.env` соответствующий `QDRANT_URL`.
 
-**Redis** пока не обязателен для основного сценария; понадобится для очередей/инициативы позже.
+**Redis** желателен, если используете очередь инициатив (`nf:initiative:candidates`); для ручного теста sweep не обязателен.
+
+**Инициатива (этап 7):** в `backend/.env` можно задать `INITIATIVE_SWEEP_SECRET` (длинная случайная строка). Тогда по расписанию (Планировщик заданий Windows, cron в WSL и т.д.) вызывайте:
+
+```text
+curl -X POST http://127.0.0.1:8000/v1/internal/initiative/sweep -H "X-Initiative-Sweep-Key: ВАШ_СЕКРЕТ"
+```
+
+Без секрета эндпоинт отвечает 404. Параметры порогов и тихих часов — `INITIATIVE_*` в `.env` (см. `app/core/config.py`).
+
+Проверка списка голосов TTS под пресет (мужской/женский/нейтральный манерный стиль):
+
+```text
+curl "http://127.0.0.1:8000/v1/meta/tts-voices?gender_style=masculine"
+```
+
+---
+
+### 2.2a. Полный стек для локального теста (этап 7 + голос + память)
+
+Ниже — что поднять и какие переменные имеют смысл для «как в проде, но на своём ПК». Минимум по-прежнему: PostgreSQL, `DATABASE_URL`, `OPENAI_API_KEY`; остальное — по необходимости.
+
+| Что запустить | Зачем |
+|---------------|--------|
+| PostgreSQL | Основное хранилище |
+| `uvicorn` (backend из `backend/`) | HTTP API |
+| Qdrant (Docker `infra/docker-compose.yml`) | Семантическая память (векторы) |
+| Redis | Очередь кандидатов инициативы (`nf:initiative:candidates`) |
+| Планировщик или ручной `curl` | `POST /v1/internal/initiative/sweep` с `X-Initiative-Sweep-Key`, если задан `INITIATIVE_SWEEP_SECRET` |
+| Flutter (`mobile/`) | Клиент |
+
+| Переменная (файл `backend/.env`) | Назначение |
+|-----------------------------------|------------|
+| `DATABASE_URL` | Async PostgreSQL (`postgresql+asyncpg://…`) |
+| `OPENAI_API_KEY` | Чат, Whisper, TTS (`tts-1`), эмбеддинги для Qdrant |
+| `SECRET_KEY` | Секрет приложения |
+| `CORS_ORIGINS` | Origin’ы браузера (Flutter web / dev server) |
+| `REDIS_URL` | Redis для инициативы; без Redis sweep может не находить кандидатов |
+| `QDRANT_URL` | URL Qdrant REST |
+| `QDRANT_API_KEY` | Если Qdrant с ключом (локально обычно пусто) |
+| `QDRANT_COLLECTION_SEMANTIC` | Имя коллекции (по умолчанию `neurofriend_semantic`) |
+| `SEMANTIC_MEMORY_ENABLED` | `true`/`false` — включить память и индексацию |
+| `EMBEDDING_MODEL` | Модель эмбеддингов (по умолчанию `text-embedding-3-small`) |
+| `SEMANTIC_MEMORY_TOP_K` | Сколько фрагментов подмешивать в промпт |
+| `CHAT_MODEL` | Модель ответов |
+| `WHISPER_MODEL` | Транскрипция голоса |
+| `TTS_MODEL` | Модель озвучки (например `tts-1`) |
+| `TTS_VOICE` | Голос по умолчанию, если у нейродруга в БД нет своего (`tts_voice` в профиле задаётся при создании / PATCH) |
+| `CHAT_MAX_MESSAGES_PER_THREAD` / `CHAT_CARRYOVER_MESSAGES` | Лимиты истории в потоке |
+| `INITIATIVE_ENABLED` | Включить логику инициативы |
+| `INITIATIVE_GAP_HOURS_MIN` / `INITIATIVE_GAP_HOURS_STRONG` | Пороги «тишины» между сообщениями |
+| `INITIATIVE_READINESS_THRESHOLD` | Порог готовности к пингу |
+| `INITIATIVE_QUIET_HOURS_START_UTC` / `INITIATIVE_QUIET_HOURS_END_UTC` | Тихие часы (UTC) |
+| `INITIATIVE_COOLDOWN_HOURS` | Кулдаун между инициативами |
+| `INITIATIVE_SWEEP_SECRET` | Секрет для `POST /v1/internal/initiative/sweep` |
+
+Голос нейродруга в приложении: при создании передаётся `tts_voice` (список из `GET /v1/meta/tts-voices?gender_style=…` согласован с `gender_style` пресета). Озвучка `POST /v1/perception/tts` и ответ на голосовой ход используют сохранённый голос. Дальнейший **Yandex TTS** — отдельный провайдер в коде (пока OpenAI).
 
 **CORS для своего ПК:** добавьте адреса, с которых откроете клиент. Примеры:
 

@@ -38,6 +38,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   String? _presetsError;
   String? _selectedPresetId;
 
+  List<TtsVoiceOption> _ttsVoices = <TtsVoiceOption>[];
+  bool _ttsVoicesLoading = false;
+  String? _ttsVoicesError;
+  String? _selectedTtsVoiceId;
+
   final _recorder = AudioRecorder();
   final _audioPlayer = AudioPlayer();
   bool _isRecording = false;
@@ -83,6 +88,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           _nameController.text = 'Нейродруг';
           _archetypeController.text = 'companion';
         });
+        await _refreshTtsVoicesForGender(null);
         return;
       }
       final first = list.first;
@@ -93,6 +99,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         _nameController.text = first.suggestedName;
         _archetypeController.text = first.archetype;
       });
+      await _refreshTtsVoicesForGender(first.genderStyle);
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -100,6 +107,40 @@ class _HomePageState extends ConsumerState<HomePage> {
         _presetsError = formatDioError(e);
         _nameController.text = 'Нейродруг';
         _archetypeController.text = 'companion';
+      });
+      await _refreshTtsVoicesForGender(null);
+    }
+  }
+
+  Future<void> _refreshTtsVoicesForGender(String? genderStyle) async {
+    if (!mounted) return;
+    setState(() {
+      _ttsVoicesLoading = true;
+      _ttsVoicesError = null;
+    });
+    final api = ref.read(neuroFriendApiProvider);
+    try {
+      final list = await api.getTtsVoices(genderStyle: genderStyle);
+      if (!mounted) return;
+      setState(() {
+        _ttsVoices = list;
+        _ttsVoicesLoading = false;
+        if (list.isNotEmpty) {
+          final cur = _selectedTtsVoiceId;
+          if (cur == null || !list.any((e) => e.id == cur)) {
+            _selectedTtsVoiceId = list.first.id;
+          }
+        } else {
+          _selectedTtsVoiceId = null;
+        }
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _ttsVoicesLoading = false;
+        _ttsVoicesError = formatDioError(e);
+        _ttsVoices = <TtsVoiceOption>[];
+        _selectedTtsVoiceId = null;
       });
     }
   }
@@ -110,6 +151,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       _nameController.text = p.suggestedName;
       _archetypeController.text = p.archetype;
     });
+    unawaited(_refreshTtsVoicesForGender(p.genderStyle));
   }
 
   Future<void> _saveNeurofriendId(String id) async {
@@ -157,6 +199,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         name: _nameController.text.trim(),
         archetype: _archetypeController.text.trim(),
         presetId: _selectedPresetId,
+        ttsVoice: _selectedTtsVoiceId,
       );
       await _saveNeurofriendId(r.id);
       if (!mounted) return;
@@ -379,6 +422,46 @@ class _HomePageState extends ConsumerState<HomePage> {
             ],
             const SizedBox(height: 16),
           ],
+          if (_ttsVoicesLoading && _ttsVoices.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16),
+              child: LinearProgressIndicator(),
+            ),
+          if (_ttsVoicesError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Голоса: $_ttsVoicesError',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          if (_ttsVoices.isNotEmpty) ...[
+            InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Голос (OpenAI TTS)',
+                border: OutlineInputBorder(),
+                isDense: true,
+                helperText:
+                    'Список подобран под манеру пресета. Качество русского — на слух; позже планируется Yandex TTS.',
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _selectedTtsVoiceId,
+                  items: _ttsVoices
+                      .map(
+                        (v) => DropdownMenuItem<String>(
+                          value: v.id,
+                          child: Text(v.label, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _busy ? null : (v) => setState(() => _selectedTtsVoiceId = v),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           TextField(
             controller: _nameController,
             decoration: const InputDecoration(labelText: 'Имя'),
@@ -428,21 +511,42 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-          child: Row(
-            children: [
-              Icon(Icons.graphic_eq, size: 18, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Озвучивать ответы (TTS)',
-                  style: Theme.of(context).textTheme.bodySmall,
+          child: Tooltip(
+            message:
+                'Включено: после создания нейродруга и при ответе на текст автоматически воспроизводится речь (TTS). '
+                'Выключено: звук только после голосовой записи; любую реплику ассистента можно озвучить кнопкой динамика.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.graphic_eq, size: 18, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Озвучивать ответы (TTS)',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    Switch(
+                      value: _voiceRepliesEnabled,
+                      onChanged: _busy ? null : (v) => setState(() => _voiceRepliesEnabled = v),
+                    ),
+                  ],
                 ),
-              ),
-              Switch(
-                value: _voiceRepliesEnabled,
-                onChanged: _busy ? null : (v) => setState(() => _voiceRepliesEnabled = v),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.only(left: 26, top: 2),
+                  child: Text(
+                    _voiceRepliesEnabled
+                        ? 'Авто-озвучка intro и текстовых ответов включена.'
+                        : 'Авто-озвучка выключена; запись голоса и кнопка у сообщения работают.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         Expanded(

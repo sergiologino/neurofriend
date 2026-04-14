@@ -78,6 +78,23 @@ class PersonalityPreset {
   }
 }
 
+/// Элемент `GET /v1/meta/tts-voices` — голос OpenAI TTS под манеру пресета.
+class TtsVoiceOption {
+  TtsVoiceOption({required this.id, required this.label, required this.gender});
+
+  factory TtsVoiceOption.fromJson(Map<String, dynamic> json) {
+    return TtsVoiceOption(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      gender: json['gender'] as String,
+    );
+  }
+
+  final String id;
+  final String label;
+  final String gender;
+}
+
 class ChatMessage {
   ChatMessage({
     required this.id,
@@ -259,6 +276,7 @@ class NeuroFriendApi {
     required String name,
     required String archetype,
     String? presetId,
+    String? ttsVoice,
   }) async {
     final data = <String, dynamic>{
       'name': name,
@@ -267,6 +285,9 @@ class NeuroFriendApi {
     };
     if (presetId != null && presetId.isNotEmpty) {
       data['preset_id'] = presetId;
+    }
+    if (ttsVoice != null && ttsVoice.isNotEmpty) {
+      data['tts_voice'] = ttsVoice;
     }
     final response = await _dio.post<Map<String, dynamic>>(
       '/v1/neurofriends',
@@ -340,6 +361,22 @@ class NeuroFriendApi {
     return data
         .whereType<Map>()
         .map((e) => PersonalityPreset.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Список голосов TTS для [genderStyle] пресета (`masculine` / `feminine` / `neutral` или null).
+  Future<List<TtsVoiceOption>> getTtsVoices({String? genderStyle}) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/meta/tts-voices',
+      queryParameters: <String, dynamic>{
+        if (genderStyle != null && genderStyle.isNotEmpty) 'gender_style': genderStyle,
+      },
+    );
+    final data = response.data;
+    if (data is! List) return <TtsVoiceOption>[];
+    return data
+        .whereType<Map>()
+        .map((e) => TtsVoiceOption.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 

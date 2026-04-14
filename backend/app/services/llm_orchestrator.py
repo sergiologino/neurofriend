@@ -135,3 +135,63 @@ async def generate_reply(
     except Exception as e:
         logger.warning("generate_reply: OpenAI failed, using fallback: %s", e)
         return fallback
+
+
+async def generate_initiative_ping(
+    *,
+    nf: NeuroFriendProfile,
+    core: IdentityCore | None,
+    state: InternalStateSnapshot | None,
+    rel: RelationshipModel | None,
+    gap_hours: float,
+    memory_snippets: list[str] | None = None,
+    conversation_transcript: str | None = None,
+) -> str:
+    """Исходящая реплика без входящего сообщения пользователя (пауза в диалоге)."""
+    client = get_openai_client()
+    settings = get_settings()
+    system = _identity_system_prompt(nf, core)
+    if conversation_transcript and conversation_transcript.strip():
+        system += (
+            "\n\nНедавний диалог (опирайся на смысл; сейчас ты пишешь первым после паузы):\n"
+            + conversation_transcript.strip()
+        )
+    if state:
+        system += (
+            f"\nВнутреннее состояние (условно): valence={state.valence:.2f}, attachment={state.attachment:.2f}, "
+            f"loneliness={state.loneliness:.2f}, hurt={state.hurt:.2f}."
+        )
+    if rel:
+        system += (
+            f"\nОтношение к пользователю: trust={rel.trust:.2f}, warmth={rel.warmth:.2f}, "
+            f"attachment={rel.attachment:.2f}."
+        )
+    if memory_snippets:
+        system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:12])
+    system += (
+        f"\n\nСИТУАЦИЯ ИНИЦИАТИВЫ: пользователь долго не писал (порядка {gap_hours:.1f} ч.). "
+        "Ты сам пишешь первым — коротко, по-человечески, без давления и без упреков в молчании. "
+        "Можно наблюдение или мягкий вопрос. Без Markdown."
+    )
+    user_prompt = (
+        "[Системное задание: одна реплика исходящей инициативы нейродруга после тишины. "
+        "Пользователь ещё не писал в этой волне — это твоё первое сообщение после паузы.]"
+    )
+    fallback = "Я на связи. Если захочешь поговорить — напиши, когда будет удобно."
+    if not client:
+        return fallback
+    try:
+        chat = await client.chat.completions.create(
+            model=settings.chat_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.88,
+            max_tokens=320,
+        )
+        text = (chat.choices[0].message.content or "").strip()
+        return text if text else fallback
+    except Exception as e:
+        logger.warning("generate_initiative_ping: OpenAI failed, using fallback: %s", e)
+        return fallback

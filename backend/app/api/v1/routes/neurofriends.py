@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.models.conversation import Message
-from app.schemas.neurofriends import NeuroFriendCreateRequest, NeuroFriendCreateResponse
+from app.models.neurofriend import NeuroFriendProfile
+from app.schemas.neurofriends import NeuroFriendCreateRequest, NeuroFriendCreateResponse, NeuroFriendPatchRequest
 from app.services import chat_thread_service, event_service, neurofriend_service
 from app.services.semantic_memory import index_intro_only
 
@@ -67,8 +68,6 @@ async def get_neurofriend(
 ) -> dict:
     from sqlalchemy import select
 
-    from app.models.neurofriend import NeuroFriendProfile
-
     r = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))
     nf = r.scalar_one_or_none()
     if not nf:
@@ -78,5 +77,47 @@ async def get_neurofriend(
         "user_id": str(nf.user_id),
         "name": nf.name,
         "archetype": nf.archetype,
+        "gender_style": nf.gender_style,
+        "tts_voice": nf.tts_voice,
         "identity_locked": nf.identity_locked,
+    }
+
+
+@router.patch("/{neurofriend_id}", response_model=dict)
+async def patch_neurofriend(
+    neurofriend_id: uuid.UUID,
+    body: NeuroFriendPatchRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    from sqlalchemy import select
+
+    from app.services.tts_voice_catalog import is_valid_voice_for_gender
+
+    r = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))
+    nf = r.scalar_one_or_none()
+    if not nf:
+        raise HTTPException(status_code=404, detail="NeuroFriend not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    if "tts_voice" in updates:
+        vid = updates["tts_voice"]
+        if vid is None or (isinstance(vid, str) and not vid.strip()):
+            raise HTTPException(status_code=400, detail="tts_voice cannot be empty")
+        vid = vid.strip()
+        if not is_valid_voice_for_gender(vid, nf.gender_style):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Voice '{vid}' does not match neurofriend gender_style",
+            )
+        nf.tts_voice = vid
+
+    await session.commit()
+    await session.refresh(nf)
+    return {
+        "id": str(nf.id),
+        "gender_style": nf.gender_style,
+        "tts_voice": nf.tts_voice,
     }

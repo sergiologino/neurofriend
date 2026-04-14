@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.neurofriends import NeuroFriendCreateRequest, TemperamentIn
 from app.services import llm_orchestrator
 from app.services.presets_catalog import get_preset_by_id
+from app.services.tts_voice_catalog import normalize_voice_choice
 
 
 async def create_neurofriend(session: AsyncSession, body: NeuroFriendCreateRequest) -> tuple[User, NeuroFriendProfile, str]:
@@ -36,6 +37,8 @@ async def create_neurofriend(session: AsyncSession, body: NeuroFriendCreateReque
         gender_style = gender_style or preset.gender_style
         life_legend = preset.life_legend
 
+    tts_resolved = normalize_voice_choice(body.tts_voice, gender_style)
+
     if body.temperament:
         base_t = TemperamentIn(**{**base_t.model_dump(), **body.temperament.model_dump()})
 
@@ -54,6 +57,7 @@ async def create_neurofriend(session: AsyncSession, body: NeuroFriendCreateReque
         gender_style=gender_style,
         age_style=body.age_style,
         archetype=body.archetype.strip(),
+        tts_voice=tts_resolved,
         identity_locked=True,
         persona_summary=None,
     )

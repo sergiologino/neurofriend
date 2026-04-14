@@ -9,12 +9,17 @@ from app.core.config import get_settings
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.schemas.perception import TtsRequest, TtsResponse, VoiceTurnResponse
 from app.services import affect_lite, chat_thread_service, event_service, speech_openai
+from app.services.tts_voice_catalog import normalize_voice_choice
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
 from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
 from app.services.openai_client import get_openai_client
 
 router = APIRouter()
+
+
+def _resolved_tts_voice(nf: NeuroFriendProfile) -> str:
+    return normalize_voice_choice(nf.tts_voice, nf.gender_style)
 
 
 @router.post("/tts", response_model=TtsResponse)
@@ -35,15 +40,16 @@ async def perception_tts(
     if not text:
         raise HTTPException(status_code=400, detail="Empty text")
 
+    voice = _resolved_tts_voice(nf)
     try:
-        mp3 = await speech_openai.synthesize_speech_mp3(text=text)
+        mp3 = await speech_openai.synthesize_speech_mp3(text=text, voice=voice)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
     settings = get_settings()
     return TtsResponse(
         audio_base64=speech_openai.bytes_to_base64_mp3(mp3),
-        meta={"tts_model": settings.tts_model, "tts_voice": settings.tts_voice},
+        meta={"tts_model": settings.tts_model, "tts_voice": voice},
     )
 
 
@@ -115,8 +121,9 @@ async def perception_audio(
         conversation_transcript=transcript_ctx,
     )
 
+    voice = _resolved_tts_voice(nf)
     try:
-        mp3 = await speech_openai.synthesize_speech_mp3(text=reply_text)
+        mp3 = await speech_openai.synthesize_speech_mp3(text=reply_text, voice=voice)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
@@ -129,7 +136,7 @@ async def perception_audio(
         normalized={
             "text": reply_text,
             "tts_model": settings.tts_model,
-            "tts_voice": settings.tts_voice,
+            "tts_voice": voice,
         },
     )
 

@@ -21,6 +21,8 @@ class NeuroFriendProfile(Base):
     gender_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
     age_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
     archetype: Mapped[str] = mapped_column(String(120))
+    # Имя голоса OpenAI TTS; при NULL при озвучке подставляется дефолт по gender_style.
+    tts_voice: Mapped[str | None] = mapped_column(String(32), nullable=True)
     identity_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     persona_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utc_naive_now)

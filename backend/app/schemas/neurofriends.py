@@ -25,6 +25,12 @@ class NeuroFriendCreateRequest(BaseModel):
     relationship_style: str | None = None
     identity_lock_confirmed: bool = False
     user_display_name: str | None = Field(None, max_length=200)
+    """Голос OpenAI TTS; должен соответствовать `gender_style` (после слияния с пресетом)."""
+    tts_voice: str | None = Field(None, max_length=32)
+
+
+class NeuroFriendPatchRequest(BaseModel):
+    tts_voice: str | None = Field(None, max_length=32)
 
 
 class NeuroFriendCreateResponse(BaseModel):

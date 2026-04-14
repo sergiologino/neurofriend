@@ -29,14 +29,15 @@ async def transcribe_audio(*, audio_bytes: bytes, filename: str) -> str:
     return (transcript.text or "").strip()
 
 
-async def synthesize_speech_mp3(*, text: str) -> bytes:
+async def synthesize_speech_mp3(*, text: str, voice: str | None = None) -> bytes:
     client = get_openai_client()
     settings = get_settings()
     if not client:
         raise RuntimeError("OPENAI_API_KEY is not configured")
+    v = voice or settings.tts_voice
     speech = await client.audio.speech.create(
         model=settings.tts_model,
-        voice=settings.tts_voice,  # type: ignore[arg-type]
+        voice=v,  # type: ignore[arg-type]
         input=text,
         response_format="mp3",
     )
