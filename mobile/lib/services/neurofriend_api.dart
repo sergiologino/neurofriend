@@ -322,6 +322,24 @@ class NeuroFriendApi {
     return TtsResult.fromJson(response.data!);
   }
 
+  /// До создания нейродруга: тот же TTS, что после диалога (`POST /v1/meta/tts-preview`).
+  Future<TtsResult> previewTts({
+    required String ttsVoice,
+    String? genderStyle,
+    String? text,
+  }) async {
+    final data = <String, dynamic>{
+      'tts_voice': ttsVoice,
+      if (genderStyle != null && genderStyle.isNotEmpty) 'gender_style': genderStyle,
+      if (text != null && text.trim().isNotEmpty) 'text': text.trim(),
+    };
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/meta/tts-preview',
+      data: data,
+    );
+    return TtsResult.fromJson(response.data!);
+  }
+
   Future<VoiceTurnResult> sendVoiceAudio(String neurofriendId, String audioFilePath) async {
     final formData = FormData.fromMap(<String, dynamic>{
       'neurofriend_id': neurofriendId,

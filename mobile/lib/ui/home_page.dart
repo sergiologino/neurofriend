@@ -42,6 +42,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   bool _ttsVoicesLoading = false;
   String? _ttsVoicesError;
   String? _selectedTtsVoiceId;
+  bool _voicePreviewBusy = false;
 
   final _recorder = AudioRecorder();
   final _audioPlayer = AudioPlayer();
@@ -152,6 +153,37 @@ class _HomePageState extends ConsumerState<HomePage> {
       _archetypeController.text = p.archetype;
     });
     unawaited(_refreshTtsVoicesForGender(p.genderStyle));
+  }
+
+  String? _genderStyleForSelectedPreset() {
+    final presets = _presets;
+    final id = _selectedPresetId;
+    if (presets == null || id == null) return null;
+    for (final p in presets) {
+      if (p.id == id) return p.genderStyle;
+    }
+    return null;
+  }
+
+  Future<void> _previewVoiceSample() async {
+    final voice = _selectedTtsVoiceId;
+    if (voice == null || _busy) return;
+    setState(() => _voicePreviewBusy = true);
+    final api = ref.read(neuroFriendApiProvider);
+    try {
+      final t = await api.previewTts(
+        ttsVoice: voice,
+        genderStyle: _genderStyleForSelectedPreset(),
+      );
+      if (!mounted) return;
+      await _playReplyMp3(t.audioBase64);
+    } on DioException catch (e) {
+      if (mounted) _snack('Прослушивание: ${formatDioError(e)}');
+    } catch (e) {
+      if (mounted) _snack('Прослушивание: $e');
+    } finally {
+      if (mounted) setState(() => _voicePreviewBusy = false);
+    }
   }
 
   Future<void> _saveNeurofriendId(String id) async {
@@ -458,6 +490,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                       .toList(),
                   onChanged: _busy ? null : (v) => setState(() => _selectedTtsVoiceId = v),
                 ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: (_busy || _voicePreviewBusy || _selectedTtsVoiceId == null)
+                    ? null
+                    : _previewVoiceSample,
+                icon: _voicePreviewBusy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow_outlined),
+                label: Text(_voicePreviewBusy ? 'Генерация…' : 'Прослушать голос'),
               ),
             ),
             const SizedBox(height: 16),
