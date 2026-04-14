@@ -10,7 +10,7 @@
 
 - Каталог пресетов (`GET /v1/meta/personality-presets`), выбор карточкой образа (название, подпись пола, фрагмент легенды); при создании уходит `preset_id` — на backend подмешиваются стиль, легенда и темперамент.
 - Создание нейродруга (`POST /v1/neurofriends`), сохранение `neurofriend_id` в `shared_preferences`.
-- Лента чата из активного треда (`GET .../threads/active/messages`), pull-to-refresh.
+- Лента чата из активного треда (`GET .../threads/active/messages`), pull-to-refresh; текст сообщений **выделяется** (копирование в буфер обмена).
 - Текстовый ввод → `POST .../messages`.
 - Запись WAV → `POST /v1/perception/audio`, воспроизведение ответа TTS (MP3 base64).
 - Экран **Инспектор** (события + primary relationship) через debug API.

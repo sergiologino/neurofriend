@@ -421,7 +421,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                           : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(m.text),
+                    child: SelectableText(
+                      m.text,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
                   ),
                 );
               },

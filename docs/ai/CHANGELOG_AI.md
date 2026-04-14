@@ -1,5 +1,6 @@
 # История изменений (AI-память)
 
+- **2026-04-13:** Зафиксировано в `CURRENT_STATE.md`: «убогий» шаблонный ответ («Я слышу тебя. Ты сказал: …») — это **fallback LLM** при отсутствии ключа OpenAI или ошибке API, не целевой UX; содержательную часть диалога отлаживаем позже по плану. Flutter: реплики в ленте — `SelectableText` для копирования текста.
 - **2026-04-13:** Этап 6 (первая итерация): семантическая память — Qdrant-коллекция при старте, OpenAI embeddings, индексация реплик и intro, retrieval в `generate_reply`; `SEMANTIC_MEMORY_ENABLED`, `QDRANT_*`, `EMBEDDING_*`; заготовка `memory_consolidation.py`. Документы: `ARCHITECTURE.md`, `DECISIONS.md` D-010, `ROADMAP.md` этап 6.
 - **2026-04-13:** Flutter: экран создания — карточки пресетов с `genderLabelRu` и усечённой `life_legend`; модель `PersonalityPreset` парсит `gender_style` / `life_legend`.
 - **2026-04-13:** Цель SRS «личность, не опросник»: пресеты дополнены `gender_style` и `life_legend`; при создании с пресетом они попадают в `IdentityCore`; системный промпт LLM — блок естественности диалога + легенда; intro без обязательного вопроса в конце. `DECISIONS.md` D-009, `PROJECT_OVERVIEW.md`.

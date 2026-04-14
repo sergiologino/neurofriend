@@ -86,7 +86,29 @@ Backend при старте читает файл **`.env` из папки `back
 
 **Минимум для первого запуска:** корректный `DATABASE_URL` и `OPENAI_API_KEY`, если вы хотите голос и ответы нейросети. Без ключа OpenAI часть функций не заработает.
 
-**Qdrant (семантическая память):** при `SEMANTIC_MEMORY_ENABLED=true` (по умолчанию) и заданном `OPENAI_API_KEY` API ожидает Qdrant по `QDRANT_URL` (часто `http://127.0.0.1:6333`). Поднимите сервис, например из корня репозитория: `docker compose -f infra/docker-compose.yml up -d qdrant`. Если Qdrant недоступен, приложение стартует, но коллекция не создастся и retrieval будет пустым (см. логи). Полностью отключить векторную память: `SEMANTIC_MEMORY_ENABLED=false`.
+**Qdrant (семантическая память)** нужен для индексации и поиска по смыслу; без него API работает, но блок памяти в промпте пустой. В `backend/.env` обычно: `QDRANT_URL=http://127.0.0.1:6333`, `SEMANTIC_MEMORY_ENABLED=true`, плюс `OPENAI_API_KEY` (эмбеддинги). Отключить память полностью: `SEMANTIC_MEMORY_ENABLED=false`.
+
+#### Запуск Qdrant через Docker Desktop (Windows)
+
+1. Запустите **Docker Desktop** и дождитесь статуса *Running* (иконка кита в трее).
+2. Откройте **PowerShell** или **cmd** и перейдите в корень репозитория приложения (папка, где лежит каталог `infra`), например:
+   ```text
+   cd E:\1_MyProjects\1_Human_robofriend\Application
+   ```
+3. Поднимите только Qdrant в фоне:
+   ```text
+   docker compose -f infra/docker-compose.yml up -d qdrant
+   ```
+   Первый раз скачается образ `qdrant/qdrant` (версия в `infra/docker-compose.yml`, согласована с `qdrant-client` в backend); порты **6333** (REST) и **6334** (gRPC) пробрасываются на ваш ПК.
+4. Проверка: в браузере откройте [http://127.0.0.1:6333/dashboard](http://127.0.0.1:6333/dashboard) — должна открыться панель Qdrant. Либо в PowerShell: `curl http://127.0.0.1:6333/` (ожидается JSON с версией).
+5. Запустите backend (`uvicorn` из `backend/`). При старте создаётся коллекция для семантической памяти (если Qdrant доступен и задан ключ OpenAI).
+6. Остановка контейнера (когда не нужен): из того же корня репозитория:
+   ```text
+   docker compose -f infra/docker-compose.yml stop qdrant
+   ```
+   Удалить контейнер и том с данными векторов — только если осознанно нужно очистить хранилище (см. `docker compose down -v` в документации Docker; **осторожно:** затронет том `neurofriend_qdrant`).
+
+Если порт **6333** уже занят другим приложением, измените проброс в `infra/docker-compose.yml` (например `"6335:6333"`) и укажите в `.env` соответствующий `QDRANT_URL`.
 
 **Redis** пока не обязателен для основного сценария; понадобится для очередей/инициативы позже.
 
