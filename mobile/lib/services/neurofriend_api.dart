@@ -166,6 +166,21 @@ class TextReplyResult {
   final String replyText;
 }
 
+/// Ответ `POST /v1/perception/tts` — озвучка готового текста (intro, чат, повтор).
+class TtsResult {
+  TtsResult({required this.audioBase64, this.meta});
+
+  factory TtsResult.fromJson(Map<String, dynamic> json) {
+    return TtsResult(
+      audioBase64: json['audio_base64'] as String,
+      meta: json['meta'] as Map<String, dynamic>?,
+    );
+  }
+
+  final String audioBase64;
+  final Map<String, dynamic>? meta;
+}
+
 class DebugEventItem {
   DebugEventItem({
     required this.id,
@@ -273,6 +288,17 @@ class NeuroFriendApi {
       data: <String, dynamic>{'text': text},
     );
     return TextReplyResult.fromJson(response.data!);
+  }
+
+  Future<TtsResult> synthesizeSpeech(String neurofriendId, String text) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/perception/tts',
+      data: <String, dynamic>{
+        'neurofriend_id': neurofriendId,
+        'text': text,
+      },
+    );
+    return TtsResult.fromJson(response.data!);
   }
 
   Future<VoiceTurnResult> sendVoiceAudio(String neurofriendId, String audioFilePath) async {

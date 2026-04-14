@@ -4,7 +4,7 @@
 
 ## Репозиторий
 
-- **Backend (FastAPI):** `backend/` — PostgreSQL, Alembic `20260412_0001`, эндпоинты `/health`, `/v1/meta/personality-presets`, `/v1/neurofriends` (опционально `preset_id`), `/v1/perception/audio`, `/v1/conversations/...`, debug. Ответы LLM учитывают **недавний транскрипт** активного треда и **стиль пресета** (`character_prompt` в ядре).
+- **Backend (FastAPI):** `backend/` — PostgreSQL, Alembic `20260412_0001`, эндпоинты `/health`, `/v1/meta/personality-presets`, `/v1/neurofriends` (опционально `preset_id`), `/v1/perception/audio`, **`/v1/perception/tts`** (озвучка готового текста), `/v1/conversations/...`, debug. Ответы LLM учитывают **недавний транскрипт** активного треда и **стиль пресета** (`character_prompt` в ядре).
 - **Инфраструктура:** `infra/docker-compose.yml` (опционально Postgres в контейнере; **для разработки достаточно локального PostgreSQL на хосте** — см. `infra/README.md`). Redis/Qdrant в compose по необходимости. Сборка Docker-образа backend ранее не проверялась (daemon мог быть недоступен).
 - **Клиент:** `mobile/` — Flutter: выбор пресета при создании нейродруга, лента чата, голос/текст, инспектор; стек см. `mobile/README.md`.
 - Память проекта: `docs/ai/`.

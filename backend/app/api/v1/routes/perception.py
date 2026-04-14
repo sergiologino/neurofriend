@@ -1,12 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
-from app.schemas.perception import VoiceTurnResponse
+from app.schemas.perception import TtsRequest, TtsResponse, VoiceTurnResponse
 from app.services import affect_lite, chat_thread_service, event_service, speech_openai
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
@@ -14,6 +15,36 @@ from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
 from app.services.openai_client import get_openai_client
 
 router = APIRouter()
+
+
+@router.post("/tts", response_model=TtsResponse)
+async def perception_tts(
+    body: TtsRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TtsResponse:
+    """Озвучка произвольного текста (тот же TTS, что после голосового хода)."""
+    if get_openai_client() is None:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
+
+    rnf = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == body.neurofriend_id))
+    nf = rnf.scalar_one_or_none()
+    if not nf:
+        raise HTTPException(status_code=404, detail="NeuroFriend not found")
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+
+    try:
+        mp3 = await speech_openai.synthesize_speech_mp3(text=text)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+    settings = get_settings()
+    return TtsResponse(
+        audio_base64=speech_openai.bytes_to_base64_mp3(mp3),
+        meta={"tts_model": settings.tts_model, "tts_voice": settings.tts_voice},
+    )
 
 
 @router.post("/audio", response_model=VoiceTurnResponse)
@@ -28,8 +59,6 @@ async def perception_audio(
     raw = await audio.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty audio")
-
-    from sqlalchemy import select
 
     rnf = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))
     nf = rnf.scalar_one_or_none()

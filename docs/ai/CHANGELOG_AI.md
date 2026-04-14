@@ -1,5 +1,6 @@
 # История изменений (AI-память)
 
+- **2026-04-13:** Голос end-to-end для чата: `POST /v1/perception/tts` (OpenAI TTS); Flutter — авто-озвучка intro и текстовых ответов, переключатель «Озвучивать ответы», кнопка 🔊 у реплик ассистента; голосовой ход по-прежнему получает MP3 из `/perception/audio`. `ARCHITECTURE.md`.
 - **2026-04-13:** Зафиксировано в `CURRENT_STATE.md`: «убогий» шаблонный ответ («Я слышу тебя. Ты сказал: …») — это **fallback LLM** при отсутствии ключа OpenAI или ошибке API, не целевой UX; содержательную часть диалога отлаживаем позже по плану. Flutter: реплики в ленте — `SelectableText` для копирования текста.
 - **2026-04-13:** Этап 6 (первая итерация): семантическая память — Qdrant-коллекция при старте, OpenAI embeddings, индексация реплик и intro, retrieval в `generate_reply`; `SEMANTIC_MEMORY_ENABLED`, `QDRANT_*`, `EMBEDDING_*`; заготовка `memory_consolidation.py`. Документы: `ARCHITECTURE.md`, `DECISIONS.md` D-010, `ROADMAP.md` этап 6.
 - **2026-04-13:** Flutter: экран создания — карточки пресетов с `genderLabelRu` и усечённой `life_legend`; модель `PersonalityPreset` парсит `gender_style` / `life_legend`.

@@ -71,6 +71,7 @@ Application/
 - `GET /health`, `GET /v1/health`
 - `POST /v1/neurofriends`, `GET /v1/neurofriends/{id}`
 - `POST /v1/perception/audio` (multipart: `neurofriend_id`, `audio`)
+- `POST /v1/perception/tts` (JSON: `neurofriend_id`, `text`) — TTS для готового текста (intro, ответ из чата, повтор без повторного LLM)
 - `POST /v1/conversations/{neurofriend_id}/messages`, `GET .../threads/active/messages`, `GET .../threads/archived`
 - `GET /v1/neurofriends/{id}/debug/events`, `GET .../debug/relationships/primary`
 - `GET /v1/meta/personality-presets` — каталог пресетов для онбординга (канонический JSON: `backend/app/data/personality_presets.json`)

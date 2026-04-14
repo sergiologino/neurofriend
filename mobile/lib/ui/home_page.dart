@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -40,6 +41,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   final _recorder = AudioRecorder();
   final _audioPlayer = AudioPlayer();
   bool _isRecording = false;
+  /// Авто-озвучка ответов ассистента (intro и текст); голосовой ход и так возвращает MP3.
+  bool _voiceRepliesEnabled = true;
 
   List<ChatMessage> _messages = <ChatMessage>[];
 
@@ -159,6 +162,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
       _snack('Создан нейродруг, intro в ленте');
       await _refreshMessages();
+      if (mounted && _voiceRepliesEnabled && r.firstIntroMessage.trim().isNotEmpty) {
+        unawaited(_playAssistantVoice(r.firstIntroMessage));
+      }
     } on DioException catch (e) {
       if (!mounted) return;
       _snack('Ошибка: ${formatDioError(e)}');
@@ -177,9 +183,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     setState(() => _busy = true);
     final api = ref.read(neuroFriendApiProvider);
     try {
-      await api.sendTextMessage(id, text);
+      final reply = await api.sendTextMessage(id, text);
       _textController.clear();
       await _refreshMessages();
+      if (_voiceRepliesEnabled && reply.replyText.trim().isNotEmpty) {
+        await _playAssistantVoice(reply.replyText);
+      }
     } on DioException catch (e) {
       _snack('Текст: ${formatDioError(e)}');
     } finally {
@@ -244,6 +253,23 @@ class _HomePageState extends ConsumerState<HomePage> {
     await out.writeAsBytes(bytes);
     await _audioPlayer.stop();
     await _audioPlayer.play(DeviceFileSource(out.path));
+  }
+
+  /// Озвучка через `POST /v1/perception/tts`. [allowWithoutTtsToggle] — для кнопки «ещё раз», когда переключатель выкл.
+  Future<void> _playAssistantVoice(String text, {bool allowWithoutTtsToggle = false}) async {
+    if (text.trim().isEmpty) return;
+    if (!allowWithoutTtsToggle && !_voiceRepliesEnabled) return;
+    final id = _neurofriendId;
+    if (id == null) return;
+    final api = ref.read(neuroFriendApiProvider);
+    try {
+      final tts = await api.synthesizeSpeech(id, text);
+      await _playReplyMp3(tts.audioBase64);
+    } on DioException catch (e) {
+      if (mounted) _snack('Озвучка: ${formatDioError(e)}');
+    } catch (e) {
+      if (mounted) _snack('Озвучка: $e');
+    }
   }
 
   @override
@@ -400,6 +426,25 @@ class _HomePageState extends ConsumerState<HomePage> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(
+            children: [
+              Icon(Icons.graphic_eq, size: 18, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Озвучивать ответы (TTS)',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              Switch(
+                value: _voiceRepliesEnabled,
+                onChanged: _busy ? null : (v) => setState(() => _voiceRepliesEnabled = v),
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refreshMessages,
@@ -413,7 +458,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
                     constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.85),
                     decoration: BoxDecoration(
                       color: mine
@@ -421,9 +466,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                           : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: SelectableText(
-                      m.text,
-                      style: Theme.of(context).textTheme.bodyLarge,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: SelectableText(
+                            m.text,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                        ),
+                        if (!mine)
+                          IconButton(
+                            tooltip: 'Озвучить ещё раз',
+                            icon: const Icon(Icons.volume_up_outlined, size: 20),
+                            onPressed: _busy ? null : () => _playAssistantVoice(m.text, allowWithoutTtsToggle: true),
+                          ),
+                      ],
                     ),
                   ),
                 );
