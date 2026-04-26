@@ -99,11 +99,15 @@ async def append_transcript_pair(
     source: str,
     inbound_event_id: uuid.UUID,
     outbound_event_id: uuid.UUID,
+    user_metadata: dict | None = None,
+    assistant_metadata: dict | None = None,
 ) -> tuple[ConversationThread, uuid.UUID, uuid.UUID]:
     """Append user+assistant rows; rollover before append if at capacity."""
     thread = await get_or_create_active_thread(session, neurofriend_id)
     thread = await rollover_if_full(session, thread, incoming_messages=2)
 
+    user_meta = {"paired_outbound_event_id": str(outbound_event_id), **(user_metadata or {})}
+    assistant_meta = {"paired_inbound_event_id": str(inbound_event_id), **(assistant_metadata or {})}
     umsg = Message(
         thread_id=thread.id,
         direction="in",
@@ -112,7 +116,7 @@ async def append_transcript_pair(
         message_kind="transcript",
         source=source,
         event_id=inbound_event_id,
-        metadata_json={"paired_outbound_event_id": str(outbound_event_id)},
+        metadata_json=user_meta,
     )
     amsg = Message(
         thread_id=thread.id,
@@ -122,7 +126,7 @@ async def append_transcript_pair(
         message_kind="transcript",
         source=source,
         event_id=outbound_event_id,
-        metadata_json={"paired_inbound_event_id": str(inbound_event_id)},
+        metadata_json=assistant_meta,
     )
     session.add(umsg)
     session.add(amsg)

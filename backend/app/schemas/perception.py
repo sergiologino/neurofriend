@@ -24,6 +24,6 @@ class VoiceTurnResponse(BaseModel):
     audio_mime: str = "audio/mpeg"
     neurofriend_id: uuid.UUID
     inbound_event_id: uuid.UUID
-    outbound_event_id: uuid.UUID
-    thread_id: uuid.UUID
+    outbound_event_id: uuid.UUID | None = None
+    thread_id: uuid.UUID | None = None
     meta: dict[str, Any] = Field(default_factory=dict)

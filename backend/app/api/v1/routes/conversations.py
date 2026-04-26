@@ -13,6 +13,7 @@ from app.services.biography_service import biography_snapshot_text, get_biograph
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
 from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
+from app.services.speaker_identity_service import resolve_text_speaker
 
 router = APIRouter()
 
@@ -33,8 +34,15 @@ async def send_text_message(
     rcore = await session.execute(select(IdentityCore).where(IdentityCore.neurofriend_id == neurofriend_id))
     core = rcore.scalar_one_or_none()
 
+    speaker = await resolve_text_speaker(session, neurofriend_id=nf.id)
     await affect_lite.touch_relationship(session, neurofriend_id=nf.id, user_display=None)
     state = await affect_lite.snapshot_after_user_text(session, neurofriend_id=nf.id, user_text=body.text)
+    await affect_lite.update_relationship_boundaries(
+        session,
+        neurofriend_id=nf.id,
+        user_text=body.text,
+        friction=state.friction,
+    )
 
     from app.models.relationship_state import RelationshipModel
 
@@ -51,7 +59,7 @@ async def send_text_message(
         neurofriend_id=nf.id,
         event_type="text_message_in",
         source="text_fallback",
-        normalized={"text": body.text},
+        normalized={"text": body.text, "speaker_person_ref": speaker.person_ref},
     )
 
     transcript_ctx = await build_recent_transcript_text(session, nf.id)
@@ -87,6 +95,11 @@ async def send_text_message(
         source="text_fallback",
         inbound_event_id=inbound.id,
         outbound_event_id=outbound.id,
+        user_metadata={
+            "speaker_person_ref": speaker.person_ref,
+            "speaker_display_name": speaker.display_name,
+            "participant_kind": speaker.participant_kind,
+        },
     )
     await session.commit()
 
@@ -140,6 +153,7 @@ async def list_active_messages(
                 "source": m.source,
                 "created_at": m.created_at.isoformat(),
                 "event_id": str(m.event_id) if m.event_id else None,
+                "metadata": m.metadata_json or {},
             }
             for m in msgs
         ],

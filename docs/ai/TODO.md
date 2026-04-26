@@ -21,12 +21,45 @@
 
 ## Ближайший порядок реализации
 
-1. **v4.3 Stage B — конфликтность и границы:** следующий инкремент addendum после Stage A.
-2. **Голосовое обращение и участники беседы:** определить wake/addressing policy: если нейродруг один в диалоге, реплики пользователя считаются обращёнными к нему без имени; если в окружении несколько участников/ассистентов — поддержать обращение по имени. Добавить speaker recognition: отличать основной голос пользователя от других голосов; при новом голосе культурно представиться, спросить имя, сохранить участника и дальше узнавать его по голосовому отпечатку/профилю.
+1. **v4.3 Stage C — романтическая и межличностная динамика:** медленное развитие близости, attachment dynamics, boundary/consent checks.
+2. **Полировка voice participants:** заменить MVP audio hash на реальные speaker embeddings/voiceprint, добавить явное согласие/управление участниками в UI.
 3. **Полировка памяти и инициативы:** подключить consolidation worker к реальному scheduler/deployment, добавить retrieval из SQL memory в orchestrator рядом с Qdrant, расширить push вместо polling.
 4. **Полировка SRS-onboarding:** вынести экраны из `HomePage` в feature-based структуру, добавить widget tests и пользовательский biography/expertise preview.
 5. **Full-stack smoke с медиа:** базовый HTTP smoke пройден; отдельно проверить TTS/voice с `OPENAI_API_KEY`, аудиофайлом и Qdrant retrieval в окружении с ключами.
 6. **Observability:** request id, timing middleware, метрики OpenAI/Qdrant/DB и стоимость LLM/STT/TTS.
+
+## Голосовое обращение и участники беседы
+
+Статус: первая MVP-итерация реализована 2026-04-26.
+
+Сделано:
+- feature flags `speaker_recognition_enabled`, `voice_addressing_enabled`;
+- таблица `conversation_participants` + Alembic migration `20260426_6`;
+- первый услышанный голос становится `user_main`;
+- новые голоса сохраняются как `guest_*`;
+- если новый голос сам представился (`меня зовут ...`), имя сохраняется, участник становится `known_guest`;
+- voice events и chat message metadata получают `speaker_person_ref`, `display_name`, `participant_kind`, `is_new_voice`, `addressing_required`;
+- orchestrator получает speaker context: при одном участнике имя не требуется, при нескольких можно обращаться по имени, при новом голосе нужно культурно познакомиться;
+- backend `wake_check` policy: ручная запись всегда обрабатывается, hands-free запись игнорирует неадресованные фразы; при одном участнике можно без имени, при нескольких нужен вызов по имени или новый голос для знакомства;
+- Flutter hands-free режим "слушать имя": короткие аудио-фрагменты отправляются с `wake_check=true`, неадресованные фразы не вызывают LLM/TTS;
+- hands-free во время TTS не глушится: backend получает `playback_guard_text`, отбрасывает совпадающее эхо собственной реплики как `assistant_self`, но оставляет возможность перебить нейродруга другой фразой;
+- self-echo guard также сравнивает входящий voice transcript с последними assistant messages из chat history, поэтому intro/ответы ловятся даже если клиент ещё не успел передать `playback_guard_text`;
+- `sha256_audio_mvp` заменён на `wav_acoustic_mvp`: dependency-free акустический профиль WAV-фрагмента для первичного различения голосов между участниками;
+- если эхо нейродруга поймано по `playback_guard_text`, backend запоминает его WAV-профиль как системного участника `assistant_self`; следующие похожие фрагменты отбрасываются до Whisper/LLM и не считаются людьми;
+- `assistant_self` исключён из подсчёта человеческих участников, поэтому он не ломает правило "если собеседник один, имя не обязательно";
+- STT hallucination guard: hands-free WAV с низкой голосовой активностью отбрасывается до Whisper, а типичные hallucination-фразы вроде `thank you for watching` / `subscribe to my channel` после Whisper логируются как `voice_stt_hallucination_guard` и не попадают в чат;
+- STT hallucination guard применяется ко всему voice flow до speaker/person logic, чтобы артефакты не могли стать именем/участником;
+- onboarding показывает мягкое предупреждение, если выбранная gender-style манера и имя выглядят несовместимыми по базовому списку русских имён;
+- debug endpoint `/v1/neurofriends/{id}/debug/participants`;
+- service tests + HTTP voice e2e.
+
+Осталось на будущую полировку:
+- заменить `wav_acoustic_mvp` на реальные speaker embeddings / voiceprint matching + diarization;
+- добавить echo cancellation/VAD на клиенте, чтобы barge-in работал устойчивее при громком TTS;
+- добавить enrollment/consent UX для пользователя и гостей;
+- улучшить hands-free UX: VAD/тишина, локальная wake-word модель вместо отправки коротких чанков на backend;
+- показать участников в мобильном инспекторе;
+- добавить merge/rename участников и обработку ложных совпадений.
 
 ## v4.3 Stage A — Biography + Expertise
 
@@ -50,28 +83,23 @@
 
 ## v4.3 Stage B — Conflict & Boundaries
 
-Цель: зрелая конфликтность без токсичности.
+Статус: первая итерация реализована 2026-04-26.
 
-1. Добавить feature flag `boundary_response_enabled`.
-2. Расширить `InternalStateSnapshot`: `friction`, `respect_signal`, `self_respect_activation`, `boundary_alert`.
-3. Расширить `RelationshipModel`: `conflict_memory_score`, `repair_receptivity`, `respect_baseline`, `boundary_safety_score`.
-4. Расширить `AffectService` / `affect_lite`:
-   - disrespect detection;
-   - insult detection;
-   - tension escalation;
-   - repair detection.
-5. Реализовать `BoundaryResponseService`:
-   - `evaluate_disrespect_level()`
-   - `select_boundary_mode()`
-   - `apply_cooldown_to_initiative()`
-   - `release_cooldown_after_repair()`
-6. Подключить boundary mode в orchestrator и initiative:
-   - уровни 0–4: спокойно, суховатость, явная граница, краткий отказ, временное охлаждение;
-   - без оскорблений, унижения, guilt manipulation, threat of abandonment.
-7. Тесты:
-   - disrespect/repair classification;
-   - cooldown инициативы;
-   - prompt context получает boundary mode.
+Сделано:
+- feature flag `boundary_response_enabled`;
+- новые state fields: `friction`, `respect_signal`, `self_respect_activation`, `boundary_alert`;
+- новые relationship fields: `conflict_memory_score`, `repair_receptivity`, `respect_baseline`, `boundary_safety_score`;
+- `BoundaryResponseService`: disrespect/repair detection, boundary mode, prompt context;
+- `affect_lite` обновляет conflict/boundary state после входящего текста;
+- `RelationshipModel` накапливает conflict/repair/boundary safety;
+- initiative score подавляется при активном конфликте;
+- LLM orchestrator получает boundary context и анти-лесть rule;
+- unit tests + initiative cooldown tests.
+
+Осталось на будущую полировку:
+- более точная классификация тона через LLM/модель вместо словарей;
+- UI-индикатор состояния границ в инспекторе;
+- связать boundary mode с голосовой интонацией/TTS.
 
 ## v4.3 Stage C — Romantic Dynamics
 

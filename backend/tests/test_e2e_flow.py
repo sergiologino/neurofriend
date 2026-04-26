@@ -49,8 +49,29 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]
     async def fake_index(*args, **kwargs) -> None:
         return None
 
+    async def fake_transcribe(*args, **kwargs) -> str:
+        audio_bytes = kwargs.get("audio_bytes", b"")
+        if audio_bytes == b"guest voice":
+            return "Меня зовут Антон"
+        if audio_bytes == b"self echo":
+            return "Тестовый ответ на Привет голосом"
+        if audio_bytes == b"intro echo":
+            return "Привет. Я тестовый нейродруг и уже готов к разговору."
+        if audio_bytes == b"youtube hallucination":
+            return "Thank you so much for watching!"
+        return "Привет голосом"
+
+    async def fake_tts(*args, **kwargs) -> bytes:
+        return b"mp3"
+
     asyncio.run(setup())
     app.dependency_overrides[get_session] = override_session
+    monkeypatch.setattr("app.api.v1.routes.perception.get_openai_client", lambda: object())
+    monkeypatch.setattr("app.api.v1.routes.perception.speech_openai.transcribe_audio", fake_transcribe)
+    monkeypatch.setattr("app.api.v1.routes.perception.speech_openai.synthesize_speech_mp3", fake_tts)
+    monkeypatch.setattr("app.api.v1.routes.perception.generate_reply", fake_reply)
+    monkeypatch.setattr("app.api.v1.routes.perception.retrieve_snippets", fake_retrieve)
+    monkeypatch.setattr("app.api.v1.routes.perception.index_dialogue_turn", fake_index)
     monkeypatch.setattr("app.services.llm_orchestrator.generate_intro_message", fake_intro)
     monkeypatch.setattr("app.api.v1.routes.conversations.generate_reply", fake_reply)
     monkeypatch.setattr("app.api.v1.routes.conversations.retrieve_snippets", fake_retrieve)
@@ -157,3 +178,84 @@ def test_thread_rollover_keeps_carryover(client: TestClient, monkeypatch: pytest
     assert len(messages) == 3
     assert messages[0]["role"] == "assistant"
     assert messages[-2]["text"] == "Нужен rollover."
+
+
+def test_voice_flow_tracks_participants(client: TestClient) -> None:
+    created = client.post(
+        "/v1/neurofriends",
+        json={
+            "name": "Марина",
+            "archetype": "warm_companion",
+            "selected_preset_id": "warm_companion",
+            "identity_lock_confirmed": True,
+        },
+    )
+    assert created.status_code == 200
+    nf = created.json()
+
+    first = client.post(
+        "/v1/perception/audio",
+        data={"neurofriend_id": nf["id"]},
+        files={"audio": ("main.wav", b"main voice", "audio/wav")},
+    )
+    assert first.status_code == 200
+    assert first.json()["meta"]["speaker_person_ref"] == "user_main"
+    assert first.json()["meta"]["addressing_required"] is False
+
+    guest = client.post(
+        "/v1/perception/audio",
+        data={"neurofriend_id": nf["id"]},
+        files={"audio": ("guest.wav", b"guest voice", "audio/wav")},
+    )
+    assert guest.status_code == 200
+    assert guest.json()["meta"]["participant_kind"] == "known_guest"
+    assert guest.json()["meta"]["speaker_display_name"] == "Антон"
+    assert guest.json()["meta"]["addressing_required"] is True
+
+    participants = client.get(f"/v1/neurofriends/{nf['id']}/debug/participants")
+    assert participants.status_code == 200
+    rows = participants.json()
+    assert [row["person_ref"] for row in rows][0] == "user_main"
+    assert any(row["display_name"] == "Антон" for row in rows)
+
+    ignored = client.post(
+        "/v1/perception/audio",
+        data={"neurofriend_id": nf["id"], "wake_check": "true"},
+        files={"audio": ("guest.wav", b"guest voice", "audio/wav")},
+    )
+    assert ignored.status_code == 200
+    assert ignored.json()["reply_text"] == ""
+    assert ignored.json()["audio_base64"] == ""
+    assert ignored.json()["meta"]["addressed_to_neurofriend"] is False
+
+    self_echo = client.post(
+        "/v1/perception/audio",
+        data={
+            "neurofriend_id": nf["id"],
+            "wake_check": "true",
+            "playback_guard_text": "Тестовый ответ на Привет голосом",
+        },
+        files={"audio": ("echo.wav", b"self echo", "audio/wav")},
+    )
+    assert self_echo.status_code == 200
+    assert self_echo.json()["reply_text"] == ""
+    assert self_echo.json()["meta"]["self_voice_echo"] is True
+
+    intro_echo = client.post(
+        "/v1/perception/audio",
+        data={"neurofriend_id": nf["id"], "wake_check": "true"},
+        files={"audio": ("intro.wav", b"intro echo", "audio/wav")},
+    )
+    assert intro_echo.status_code == 200
+    assert intro_echo.json()["reply_text"] == ""
+    assert intro_echo.json()["meta"]["self_voice_echo"] is True
+    assert intro_echo.json()["meta"]["matched_recent_assistant"] is True
+
+    hallucination = client.post(
+        "/v1/perception/audio",
+        data={"neurofriend_id": nf["id"], "wake_check": "false"},
+        files={"audio": ("silence.wav", b"youtube hallucination", "audio/wav")},
+    )
+    assert hallucination.status_code == 200
+    assert hallucination.json()["reply_text"] == ""
+    assert hallucination.json()["meta"]["stt_hallucination"] is True

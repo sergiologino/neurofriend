@@ -1,4 +1,17 @@
-from app.services.initiative_service import compute_readiness, in_quiet_hours_for_timezone, in_quiet_hours_utc
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+from app.core.database import Base
+from app.models.neurofriend import NeuroFriendProfile
+from app.models.relationship_state import RelationshipModel
+from app.models.user import User
+from app.services.initiative_service import (
+    compute_readiness,
+    get_boundary_cooldown_factor,
+    in_quiet_hours_for_timezone,
+    in_quiet_hours_utc,
+)
 
 
 def test_quiet_hours_span_midnight() -> None:
@@ -51,3 +64,37 @@ def test_quiet_hours_use_user_timezone() -> None:
         start_hour=22,
         end_hour=7,
     )
+
+
+@pytest.mark.asyncio
+async def test_boundary_cooldown_suppresses_initiative() -> None:
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with session_factory() as session:
+            user = User(display_name="user")
+            session.add(user)
+            await session.flush()
+            nf = NeuroFriendProfile(user_id=user.id, name="Test", archetype="companion", identity_locked=True)
+            session.add(nf)
+            await session.flush()
+            session.add(
+                RelationshipModel(
+                    neurofriend_id=nf.id,
+                    person_ref="user_main",
+                    conflict_memory_score=0.7,
+                    boundary_safety_score=0.3,
+                )
+            )
+            await session.flush()
+            assert await get_boundary_cooldown_factor(session, nf.id) == 0.0
+    finally:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()

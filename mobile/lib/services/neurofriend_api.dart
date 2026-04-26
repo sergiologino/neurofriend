@@ -156,6 +156,7 @@ class VoiceTurnResult {
     required this.replyText,
     required this.audioBase64,
     required this.neurofriendId,
+    required this.meta,
   });
 
   factory VoiceTurnResult.fromJson(Map<String, dynamic> json) {
@@ -164,6 +165,7 @@ class VoiceTurnResult {
       replyText: json['reply_text'] as String,
       audioBase64: json['audio_base64'] as String,
       neurofriendId: json['neurofriend_id'] as String,
+      meta: Map<String, dynamic>.from(json['meta'] as Map? ?? const <String, dynamic>{}),
     );
   }
 
@@ -171,6 +173,9 @@ class VoiceTurnResult {
   final String replyText;
   final String audioBase64;
   final String neurofriendId;
+  final Map<String, dynamic> meta;
+
+  bool get addressedToNeurofriend => meta['addressed_to_neurofriend'] as bool? ?? true;
 }
 
 class TextReplyResult {
@@ -344,9 +349,17 @@ class NeuroFriendApi {
     return TtsResult.fromJson(response.data!);
   }
 
-  Future<VoiceTurnResult> sendVoiceAudio(String neurofriendId, String audioFilePath) async {
+  Future<VoiceTurnResult> sendVoiceAudio(
+    String neurofriendId,
+    String audioFilePath, {
+    bool wakeCheck = false,
+    String? playbackGuardText,
+  }) async {
     final formData = FormData.fromMap(<String, dynamic>{
       'neurofriend_id': neurofriendId,
+      'wake_check': wakeCheck,
+      if (playbackGuardText != null && playbackGuardText.trim().isNotEmpty)
+        'playback_guard_text': playbackGuardText.trim(),
       'audio': await MultipartFile.fromFile(audioFilePath, filename: 'audio.wav'),
     });
     final response = await _dio.post<Map<String, dynamic>>(

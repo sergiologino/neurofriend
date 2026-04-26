@@ -57,6 +57,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   final _audioPlayer = AudioPlayer();
   Timer? _pollTimer;
   bool _isRecording = false;
+  bool _handsFreeListening = false;
+  bool _handsFreeChunkActive = false;
+  bool _assistantAudioPlaying = false;
+  String? _lastAssistantSpokenText;
+  DateTime? _lastAssistantSpokenAt;
   /// Авто-озвучка ответов ассистента (intro и текст); голосовой ход и так возвращает MP3.
   bool _voiceRepliesEnabled = true;
   String? _voiceProcessingLabel;
@@ -306,6 +311,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       _textController.clear();
       await _refreshMessages();
       if (_voiceRepliesEnabled && reply.replyText.trim().isNotEmpty) {
+        if (mounted && _handsFreeListening) {
+          setState(() => _busy = false);
+        }
         await _playAssistantVoice(reply.replyText);
       }
     } on DioException catch (e) {
@@ -345,18 +353,107 @@ class _HomePageState extends ConsumerState<HomePage> {
     setState(() => _isRecording = true);
   }
 
-  Future<void> _uploadVoice(String path, String neurofriendId) async {
+  Future<void> _toggleHandsFreeListening() async {
+    final id = _neurofriendId;
+    if (id == null) return;
+    if (_handsFreeListening) {
+      setState(() {
+        _handsFreeListening = false;
+        _voiceProcessingLabel = null;
+      });
+      return;
+    }
+    if (!await _recorder.hasPermission()) {
+      _snack('Нет разрешения на микрофон');
+      return;
+    }
+    setState(() {
+      _handsFreeListening = true;
+      _voiceProcessingLabel = 'Слушаю обращение по имени короткими фрагментами...';
+    });
+    unawaited(_handsFreeLoop(id));
+  }
+
+  Future<void> _handsFreeLoop(String neurofriendId) async {
+    while (mounted && _handsFreeListening) {
+      if (_busy || _isRecording || _handsFreeChunkActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        continue;
+      }
+      _handsFreeChunkActive = true;
+      String? path;
+      try {
+        final dir = await getTemporaryDirectory();
+        path = '${dir.path}/nf_wake_${DateTime.now().millisecondsSinceEpoch}.wav';
+        await _recorder.start(
+          const RecordConfig(encoder: AudioEncoder.wav),
+          path: path,
+        );
+        if (mounted) {
+          setState(() => _voiceProcessingLabel = 'Слушаю: можно позвать по имени...');
+        }
+        await Future<void>.delayed(const Duration(seconds: 4));
+        final stopped = await _recorder.stop();
+        if (!_handsFreeListening || stopped == null || stopped.isEmpty) {
+          continue;
+        }
+        await _uploadVoice(stopped, neurofriendId, wakeCheck: true);
+      } catch (e) {
+        if (mounted && _handsFreeListening) _snack('Слушание: $e');
+        try {
+          await _recorder.stop();
+        } catch (_) {}
+        await Future<void>.delayed(const Duration(seconds: 2));
+      } finally {
+        if (path != null) {
+          try {
+            final f = File(path);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
+        _handsFreeChunkActive = false;
+        if (mounted && _handsFreeListening && !_busy) {
+          setState(() => _voiceProcessingLabel = 'Слушаю обращение по имени...');
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+  }
+
+  Future<void> _uploadVoice(String path, String neurofriendId, {bool wakeCheck = false}) async {
     setState(() {
       _busy = true;
-      _voiceProcessingLabel = 'Обработка голоса: распознавание → ответ → озвучка';
+      _voiceProcessingLabel = wakeCheck
+          ? 'Проверяю, было ли обращение к нейродругу...'
+          : 'Обработка голоса: распознавание → ответ → озвучка';
     });
     final api = ref.read(neuroFriendApiProvider);
     try {
-      final turn = await api.sendVoiceAudio(neurofriendId, path);
+      final guardText = _recentPlaybackGuardText();
+      final turn = await api.sendVoiceAudio(
+        neurofriendId,
+        path,
+        wakeCheck: wakeCheck,
+        playbackGuardText: guardText,
+      );
+      if (!turn.addressedToNeurofriend) {
+        if (mounted && _handsFreeListening) {
+          setState(() => _voiceProcessingLabel = 'Слушаю обращение по имени...');
+        }
+        return;
+      }
       if (mounted) {
         setState(() => _voiceProcessingLabel = 'Озвучиваю ответ...');
       }
-      await _playReplyMp3(turn.audioBase64);
+      if (turn.audioBase64.trim().isNotEmpty) {
+        if (_assistantAudioPlaying) {
+          await _audioPlayer.stop();
+        }
+        if (mounted && _handsFreeListening) {
+          setState(() => _busy = false);
+        }
+        await _playReplyMp3(turn.audioBase64, spokenText: turn.replyText);
+      }
       await _refreshMessages();
       try {
         final f = File(path);
@@ -370,19 +467,56 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _voiceProcessingLabel = null;
+          _voiceProcessingLabel = _handsFreeListening ? 'Слушаю обращение по имени...' : null;
         });
       }
     }
   }
 
-  Future<void> _playReplyMp3(String audioBase64) async {
+  Future<void> _playReplyMp3(String audioBase64, {String? spokenText}) async {
     final bytes = NeuroFriendApi.decodeReplyMp3(audioBase64);
     final dir = await getTemporaryDirectory();
     final out = File('${dir.path}/reply_${DateTime.now().millisecondsSinceEpoch}.mp3');
     await out.writeAsBytes(bytes);
     await _audioPlayer.stop();
-    await _audioPlayer.play(DeviceFileSource(out.path));
+    _lastAssistantSpokenText = spokenText;
+    _lastAssistantSpokenAt = DateTime.now();
+    if (mounted) {
+      setState(() {
+        _assistantAudioPlaying = true;
+        if (_handsFreeListening) {
+          _voiceProcessingLabel = 'Нейродруг говорит; можно перебить голосом.';
+        }
+      });
+    } else {
+      _assistantAudioPlaying = true;
+    }
+    try {
+      final completed = _audioPlayer.onPlayerComplete.first;
+      await _audioPlayer.play(DeviceFileSource(out.path));
+      await Future.any<void>([
+        completed.then((_) {}),
+        Future<void>.delayed(const Duration(seconds: 45)),
+      ]);
+    } finally {
+      _assistantAudioPlaying = false;
+      if (mounted && _handsFreeListening) {
+        setState(() => _voiceProcessingLabel = 'Слушаю обращение по имени...');
+      } else if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  String? _recentPlaybackGuardText() {
+    final text = _lastAssistantSpokenText;
+    final at = _lastAssistantSpokenAt;
+    if (text == null || text.trim().isEmpty || at == null) return null;
+    final age = DateTime.now().difference(at);
+    if (_assistantAudioPlaying || age <= const Duration(seconds: 20)) {
+      return text;
+    }
+    return null;
   }
 
   /// Озвучка через `POST /v1/perception/tts`. [allowWithoutTtsToggle] — для кнопки «ещё раз», когда переключатель выкл.
@@ -394,7 +528,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final api = ref.read(neuroFriendApiProvider);
     try {
       final tts = await api.synthesizeSpeech(id, text);
-      await _playReplyMp3(tts.audioBase64);
+      await _playReplyMp3(tts.audioBase64, spokenText: text);
     } on DioException catch (e) {
       if (mounted) _snack('Озвучка: ${formatDioError(e)}');
     } catch (e) {
@@ -408,6 +542,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     _archetypeController.dispose();
     _textController.dispose();
     _pollTimer?.cancel();
+    _handsFreeListening = false;
+    _assistantAudioPlaying = false;
     _recorder.dispose();
     _audioPlayer.dispose();
     super.dispose();
@@ -443,7 +579,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       body: Column(
         children: [
-          if (id == null) _buildCreatePanel() else Expanded(child: _buildChat()),
+          Expanded(child: id == null ? _buildCreatePanel() : _buildChat()),
           if (id != null) _buildComposer(),
         ],
       ),
@@ -478,10 +614,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         children: [
           _OnboardingProgress(step: _onboardingStep),
           const SizedBox(height: 16),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: _buildOnboardingStep(selected),
-          ),
+          _buildOnboardingStep(selected),
           const SizedBox(height: 16),
           _buildOnboardingNav(selected),
           if (_status != null) Text(_status!, textAlign: TextAlign.center),
@@ -511,6 +644,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           ttsVoicesLoading: _ttsVoicesLoading,
           ttsVoicesError: _ttsVoicesError,
           voicePreviewBusy: _voicePreviewBusy,
+          genderStyle: selected?.genderStyle,
+          onNameChanged: (_) => setState(() {}),
           onVoiceChanged: (v) => setState(() => _selectedTtsVoiceId = v),
           onPreviewVoice: _previewVoiceSample,
         );
@@ -638,6 +773,31 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+          child: Row(
+            children: [
+              Icon(
+                _handsFreeListening ? Icons.hearing : Icons.hearing_disabled_outlined,
+                size: 18,
+                color: _handsFreeListening ? Theme.of(context).colorScheme.primary : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _handsFreeListening
+                      ? 'Режим имени включён: можно позвать «${_displayNameForWake()}».'
+                      : 'Режим имени выключен: голос отправляется кнопкой микрофона.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              Switch(
+                value: _handsFreeListening,
+                onChanged: _busy && !_handsFreeListening ? null : (_) => _toggleHandsFreeListening(),
+              ),
+            ],
+          ),
+        ),
         if (_voiceProcessingLabel != null) _buildVoiceProcessingBanner(),
         Expanded(
           child: RefreshIndicator(
@@ -719,6 +879,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  String _displayNameForWake() {
+    final name = _nameController.text.trim();
+    return name.isEmpty ? 'по имени' : name;
+  }
+
   Widget _buildComposer() {
     return Material(
       elevation: 8,
@@ -729,10 +894,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               IconButton(
-                tooltip: _isRecording ? 'Остановить и отправить' : 'Запись WAV',
+                tooltip: _isRecording ? 'Остановить и отправить' : 'Ручная запись WAV',
                 icon: Icon(_isRecording ? Icons.stop_circle : Icons.mic),
                 color: _isRecording ? Colors.red : null,
-                onPressed: _busy ? null : _toggleRecording,
+                onPressed: _busy || _handsFreeChunkActive ? null : _toggleRecording,
               ),
               Expanded(
                 child: TextField(
@@ -832,6 +997,7 @@ class _PresetGalleryStep extends StatelessWidget {
           const SizedBox(height: 12),
           ...presets.map(
             (p) => Padding(
+              key: ValueKey(p.id),
               padding: const EdgeInsets.only(bottom: 10),
               child: _PresetCard(
                 preset: p,
@@ -890,6 +1056,8 @@ class _NameAndVoiceStep extends StatelessWidget {
     required this.ttsVoicesLoading,
     required this.ttsVoicesError,
     required this.voicePreviewBusy,
+    required this.genderStyle,
+    required this.onNameChanged,
     required this.onVoiceChanged,
     required this.onPreviewVoice,
   });
@@ -901,17 +1069,31 @@ class _NameAndVoiceStep extends StatelessWidget {
   final bool ttsVoicesLoading;
   final String? ttsVoicesError;
   final bool voicePreviewBusy;
+  final String? genderStyle;
+  final ValueChanged<String> onNameChanged;
   final ValueChanged<String?> onVoiceChanged;
   final VoidCallback onPreviewVoice;
 
   @override
   Widget build(BuildContext context) {
+    final nameWarning = _nameGenderWarning(nameController.text, genderStyle);
     return _StepCard(
       title: 'Дай имя и выбери голос',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Имя')),
+          TextField(
+            controller: nameController,
+            decoration: const InputDecoration(labelText: 'Имя'),
+            onChanged: onNameChanged,
+          ),
+          if (nameWarning != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              nameWarning,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
           const SizedBox(height: 8),
           TextField(
             controller: archetypeController,
@@ -945,6 +1127,22 @@ class _NameAndVoiceStep extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String? _nameGenderWarning(String rawName, String? genderStyle) {
+    final style = genderStyle?.trim().toLowerCase();
+    if (style != 'feminine' && style != 'masculine') return null;
+    final name = rawName.trim().toLowerCase();
+    if (name.isEmpty) return null;
+    const masculineNames = {'вася', 'василий', 'денис', 'олег', 'антон', 'иван', 'сергей', 'алексей', 'дмитрий'};
+    const feminineNames = {'аня', 'анна', 'марина', 'алиса', 'елена', 'ольга', 'катя', 'екатерина', 'ирина'};
+    if (style == 'feminine' && masculineNames.contains(name)) {
+      return 'Похоже на мужское имя для женской манеры. Можно оставить, но проверь, так ли задумано.';
+    }
+    if (style == 'masculine' && feminineNames.contains(name)) {
+      return 'Похоже на женское имя для мужской манеры. Можно оставить, но проверь, так ли задумано.';
+    }
+    return null;
   }
 }
 
@@ -1150,49 +1348,56 @@ class _PresetCard extends StatelessWidget {
     final gender = preset.genderLabelRu;
     final legend = preset.lifeLegend;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          decoration: BoxDecoration(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${preset.title}${gender == null ? '' : ', $gender'}',
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? scheme.primary : scheme.outlineVariant,
-              width: selected ? 2 : 1,
-            ),
-            color: selected
-                ? scheme.primaryContainer.withValues(alpha: 0.35)
-                : scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  preset.title,
-                  style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected ? scheme.primary : scheme.outlineVariant,
+                  width: selected ? 2 : 1,
                 ),
-                if (gender != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    gender,
-                    style: textTheme.labelMedium?.copyWith(
-                      color: scheme.secondary,
-                      fontWeight: FontWeight.w500,
+                color: selected
+                    ? scheme.primaryContainer.withValues(alpha: 0.35)
+                    : scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      preset.title,
+                      style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                     ),
-                  ),
-                ],
-                if (legend != null && legend.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _legendExcerpt(legend),
-                    style: textTheme.bodySmall?.copyWith(height: 1.35),
-                  ),
-                ],
-              ],
+                    if (gender != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        gender,
+                        style: textTheme.labelMedium?.copyWith(
+                          color: scheme.secondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                    if (legend != null && legend.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _legendExcerpt(legend),
+                        style: textTheme.bodySmall?.copyWith(height: 1.35),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

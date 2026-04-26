@@ -8,6 +8,7 @@ from typing import Any
 from app.core.config import get_settings
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
+from app.services.boundary_response_service import boundary_prompt_context
 from app.services.expertise_service import expertise_snapshot_text, get_expertise_level
 from app.services.openai_client import get_openai_client
 
@@ -23,7 +24,9 @@ DIALOGUE_NATURALNESS_RU = (
     "2) Можешь мягко не соглашаться, возражать, уточнять, если это бьётся с характером персоны — как живой "
     "собеседник, не как служба поддержки, которая всегда соглашается. Спор без яда и оскорблений. "
     "3) Чередуй вопросы с высказываниями и отступлениями; не заполняй реплику подряд одними вопросами. "
-    "4) Не будь бесконечно вежливым шаблонным ассистентом."
+    "4) Не будь бесконечно вежливым шаблонным ассистентом. "
+    "5) Запрещена липкая лесть: не называй пользователя замечательным/уникальным/сильным без конкретного основания. "
+    "Тёплость допустима, но честность важнее угождения."
 )
 
 
@@ -130,6 +133,7 @@ async def generate_reply(
     memory_snippets: list[str] | None = None,
     conversation_transcript: str | None = None,
     biography_snapshot: str | None = None,
+    speaker_context: str | None = None,
 ) -> str:
     client = get_openai_client()
     settings = get_settings()
@@ -150,16 +154,22 @@ async def generate_reply(
             "\n\nНедавний диалог (опирайся на смысл, продолжай связно; не делай вид, что разговор только начался):\n"
             + conversation_transcript.strip()
         )
+    if speaker_context and speaker_context.strip():
+        system += "\n\nКонтекст говорящего:\n" + speaker_context.strip()
     if state:
         system += (
             f"\nВнутреннее состояние (условно): valence={state.valence:.2f}, attachment={state.attachment:.2f}, "
-            f"loneliness={state.loneliness:.2f}, hurt={state.hurt:.2f}."
+            f"loneliness={state.loneliness:.2f}, hurt={state.hurt:.2f}, friction={state.friction:.2f}, "
+            f"boundary_alert={state.boundary_alert:.2f}."
         )
     if rel:
         system += (
             f"\nОтношение к пользователю: trust={rel.trust:.2f}, warmth={rel.warmth:.2f}, "
             f"attachment={rel.attachment:.2f}."
         )
+    boundary_context = boundary_prompt_context(state, rel)
+    if boundary_context:
+        system += "\n" + boundary_context
     if memory_snippets:
         system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:12])
 
@@ -206,13 +216,16 @@ async def generate_initiative_ping(
     if state:
         system += (
             f"\nВнутреннее состояние (условно): valence={state.valence:.2f}, attachment={state.attachment:.2f}, "
-            f"loneliness={state.loneliness:.2f}, hurt={state.hurt:.2f}."
+            f"loneliness={state.loneliness:.2f}, hurt={state.hurt:.2f}, friction={state.friction:.2f}."
         )
     if rel:
         system += (
             f"\nОтношение к пользователю: trust={rel.trust:.2f}, warmth={rel.warmth:.2f}, "
             f"attachment={rel.attachment:.2f}."
         )
+    boundary_context = boundary_prompt_context(state, rel)
+    if boundary_context:
+        system += "\n" + boundary_context
     if memory_snippets:
         system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:12])
     system += (

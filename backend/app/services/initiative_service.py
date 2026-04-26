@@ -108,6 +108,23 @@ async def get_primary_warmth(session: AsyncSession, neurofriend_id: uuid.UUID) -
     return float(w) if w is not None else 0.5
 
 
+async def get_boundary_cooldown_factor(session: AsyncSession, neurofriend_id: uuid.UUID) -> float:
+    stmt = select(RelationshipModel.conflict_memory_score, RelationshipModel.boundary_safety_score).where(
+        RelationshipModel.neurofriend_id == neurofriend_id,
+        RelationshipModel.person_ref == "user_main",
+    )
+    result = await session.execute(stmt)
+    row = result.first()
+    if row is None:
+        return 1.0
+    conflict, safety = float(row[0] or 0.0), float(row[1] or 0.7)
+    if conflict >= 0.55 or safety <= 0.35:
+        return 0.0
+    if conflict >= 0.25 or safety <= 0.55:
+        return 0.45
+    return 1.0
+
+
 def compute_readiness(
     *,
     gap_hours: float | None,
@@ -148,6 +165,7 @@ async def build_initiative_status(session: AsyncSession, neurofriend_id: uuid.UU
         end_hour=settings.initiative_quiet_hours_end_utc,
     )
     warmth = await get_primary_warmth(session, neurofriend_id)
+    boundary_factor = await get_boundary_cooldown_factor(session, neurofriend_id)
     score = compute_readiness(
         gap_hours=gap_hours,
         warmth=warmth,
@@ -155,6 +173,7 @@ async def build_initiative_status(session: AsyncSession, neurofriend_id: uuid.UU
         min_gap_h=settings.initiative_gap_hours_min,
         strong_gap_h=settings.initiative_gap_hours_strong,
     )
+    score = score * boundary_factor
     threshold = settings.initiative_readiness_threshold
     eligible = bool(enabled and score >= threshold and not quiet)
 
@@ -163,6 +182,7 @@ async def build_initiative_status(session: AsyncSession, neurofriend_id: uuid.UU
         "gap_hours_min": settings.initiative_gap_hours_min,
         "gap_hours_strong": settings.initiative_gap_hours_strong,
         "warmth": warmth,
+        "boundary_cooldown_factor": boundary_factor,
         "quiet_hours_local": [settings.initiative_quiet_hours_start_utc, settings.initiative_quiet_hours_end_utc],
         "user_timezone": user_timezone,
     }

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.datetimeutil import utc_naive_now
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
+from app.services.boundary_response_service import apply_boundary_to_state, update_relationship_boundary
 
 
 async def get_latest_state(session: AsyncSession, neurofriend_id: uuid.UUID) -> InternalStateSnapshot | None:
@@ -33,6 +34,7 @@ async def snapshot_after_user_text(
     att = prev.attachment if prev else 0.4
     lonely = prev.loneliness if prev else 0.0
     hurt = prev.hurt if prev else 0.0
+    safety = prev.safety if prev else 0.6
     # naive sentiment hook
     t = user_text.lower()
     if any(x in t for x in ("спасибо", "люблю", "рад", "хорошо")):
@@ -41,17 +43,22 @@ async def snapshot_after_user_text(
     if any(x in t for x in ("злой", "бесит", "стоп", "отвали")):
         v = max(-1.0, v - 0.12)
         hurt = min(1.0, hurt + 0.05)
+    boundary = apply_boundary_to_state(previous=prev, text=user_text, valence=v, hurt=hurt, safety=safety)
 
     snap = InternalStateSnapshot(
         neurofriend_id=neurofriend_id,
-        valence=v,
+        valence=float(boundary["valence"]),
         arousal=prev.arousal if prev else 0.3,
         trust_baseline=prev.trust_baseline if prev else 0.5,
         attachment=att,
-        safety=prev.safety if prev else 0.6,
+        safety=float(boundary["safety"]),
         curiosity=prev.curiosity if prev else 0.5,
         loneliness=lonely,
-        hurt=hurt,
+        hurt=float(boundary["hurt"]),
+        friction=float(boundary["friction"]),
+        respect_signal=float(boundary["respect_signal"]),
+        self_respect_activation=float(boundary["self_respect_activation"]),
+        boundary_alert=float(boundary["boundary_alert"]),
     )
     session.add(snap)
     await session.flush()
@@ -84,5 +91,25 @@ async def touch_relationship(
         last_interaction_at=now,
     )
     session.add(rel)
+    await session.flush()
+    return rel
+
+
+async def update_relationship_boundaries(
+    session: AsyncSession,
+    *,
+    neurofriend_id: uuid.UUID,
+    user_text: str,
+    friction: float,
+) -> RelationshipModel | None:
+    stmt = select(RelationshipModel).where(
+        RelationshipModel.neurofriend_id == neurofriend_id,
+        RelationshipModel.person_ref == "user_main",
+    )
+    r = await session.execute(stmt)
+    rel = r.scalar_one_or_none()
+    if not rel:
+        return None
+    update_relationship_boundary(rel, text=user_text, friction=friction)
     await session.flush()
     return rel

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # Addendum v4.3 rollout flags
     biography_profile_enabled: bool = True
     expertise_profile_enabled: bool = True
+    boundary_response_enabled: bool = True
+    speaker_recognition_enabled: bool = True
+    voice_addressing_enabled: bool = True
 
 
 @lru_cache
