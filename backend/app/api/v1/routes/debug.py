@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.models.event_log import EventLog
+from app.models.neurofriend import IdentityCore
 from app.models.relationship_state import RelationshipModel
-from app.schemas.debug import EventTimelineItem, RelationshipRead
+from app.schemas.debug import BiographyDebugRead, EventTimelineItem, ExpertiseDebugRead, RelationshipRead
+from app.services.biography_service import get_biography_profile, get_biography_snapshot, validate_biography_consistency
 
 router = APIRouter()
 
@@ -66,4 +68,34 @@ async def debug_primary_relationship(
         warmth=rel.warmth,
         last_interaction_at=rel.last_interaction_at,
         active_topics_json=rel.active_topics_json if isinstance(rel.active_topics_json, list) else [],
+    )
+
+
+@router.get("/neurofriends/{neurofriend_id}/debug/biography", response_model=BiographyDebugRead)
+async def debug_biography(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> BiographyDebugRead:
+    profile = await get_biography_profile(session, neurofriend_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Biography not found")
+    return BiographyDebugRead(
+        neurofriend_id=neurofriend_id,
+        snapshot=get_biography_snapshot(profile),
+        consistency_issues=validate_biography_consistency(profile),
+    )
+
+
+@router.get("/neurofriends/{neurofriend_id}/debug/expertise", response_model=ExpertiseDebugRead)
+async def debug_expertise(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> ExpertiseDebugRead:
+    result = await session.execute(select(IdentityCore).where(IdentityCore.neurofriend_id == neurofriend_id))
+    core = result.scalar_one_or_none()
+    if not core:
+        raise HTTPException(status_code=404, detail="Identity core not found")
+    return ExpertiseDebugRead(
+        neurofriend_id=neurofriend_id,
+        profile=core.expertise_profile_json or {},
     )

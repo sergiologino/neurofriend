@@ -1,12 +1,12 @@
 # Текущее состояние
 
-**Дата актуализации:** 2026-04-13 (док. про fallback диалога + копирование в чате)
+**Дата актуализации:** 2026-04-26 (memory/initiative iteration + voice TODO)
 
 ## Репозиторий
 
-- **Backend (FastAPI):** `backend/` — PostgreSQL, Alembic `20260412_0001`, эндпоинты `/health`, `/v1/meta/personality-presets`, `/v1/neurofriends` (опционально `preset_id`), `/v1/perception/audio`, **`/v1/perception/tts`** (озвучка готового текста), `/v1/conversations/...`, debug. Ответы LLM учитывают **недавний транскрипт** активного треда и **стиль пресета** (`character_prompt` в ядре).
+- **Backend (FastAPI):** `backend/` — PostgreSQL, Alembic `20260412_0001` + последующие ревизии, эндпоинты `/health`, `/v1/meta/personality-presets`, `/v1/neurofriends` (`selected_preset_id` / legacy `preset_id`, personalization deltas), `/v1/perception/audio`, **`/v1/perception/tts`** (озвучка готового текста), `/v1/conversations/...`, debug. Ответы LLM учитывают **недавний транскрипт** активного треда, **стиль пресета** (`character_prompt` в ядре), а с v4.3 Stage A — biography snapshot и expertise profile.
 - **Инфраструктура:** `infra/docker-compose.yml` (опционально Postgres в контейнере; **для разработки достаточно локального PostgreSQL на хосте** — см. `infra/README.md`). Redis/Qdrant в compose по необходимости. Сборка Docker-образа backend ранее не проверялась (daemon мог быть недоступен).
-- **Клиент:** `mobile/` — Flutter: выбор пресета при создании нейродруга, лента чата, голос/текст, инспектор; стек см. `mobile/README.md`.
+- **Клиент:** `mobile/` — Flutter: `go_router`, первая SRS-итерация onboarding (welcome, галерея, preview, имя/голос, personalization, identity lock, birth/intro), лента чата, голос/текст, инспектор; при голосовом раунде показывается плашка обработки. Стек см. `mobile/README.md`.
 - Память проекта: `docs/ai/`.
 
 ## SRS
@@ -16,13 +16,13 @@
 
 ## Сборка и тесты
 
-- Backend: `pip install -e ".[dev]"` в `backend/`, затем `python -m pytest tests/ -q` (последняя проверка **2026-04-13:** **6 passed**).
+- Backend: `pip install -e ".[dev]"` в `backend/`, затем `python -m pytest tests/ -q` (последняя проверка **2026-04-26:** **23 passed**).
 - Перед запуском API: **локальный PostgreSQL** (рекомендуется), `alembic upgrade head`, `OPENAI_API_KEY`; для семантической памяти — поднять **Qdrant** (`infra/docker-compose.yml` сервис `qdrant` или локально порт 6333) и при необходимости выставить `QDRANT_URL`.
-- Клиент: `dart analyze lib` — без замечаний (после доработки UI). Полная сборка зависит от окружения (Flutter, Visual Studio для Windows desktop).
+- Клиент: `flutter pub get`, затем `dart analyze lib` — без замечаний (последняя проверка **2026-04-26**). Полная сборка зависит от окружения (Flutter, Visual Studio для Windows desktop).
 
 ## Известные ограничения (UX)
 
-- **Голосовой ход:** между отправкой записи и ответом проходит заметное время (Whisper + LLM + TTS); **в интерфейсе пока нет явной стадии обработки** — неловкая пауза. Запланировано: индикатор шагов / спиннер с подписью (см. `TODO.md`).
+- **Голосовой ход:** между отправкой записи и ответом проходит заметное время (Whisper + LLM + TTS); базовая плашка обработки добавлена, точные стадии можно углубить позже при разбиении backend pipeline.
 
 ## Известные ограничения (качество диалога)
 
@@ -36,9 +36,13 @@
 
 - Детальный поэтапный план: `docs/ai/ROADMAP.md` (голос Whisper+TTS в приоритете, чат как дубликат с лимитом 500 и архивом + 10 сообщений carryover, UI отношений/событий для отладки).
 - **Следующие конкретные шаги и бэклог:** `docs/ai/TODO.md`.
+- Addendum v4.3 добавлен в единый план как безопасное расширение текущей архитектуры. Stage A (biography + expertise) реализован первой итерацией: `BiographyProfile`, `BiographyService`, `expertise_profile_json`, `ExpertiseService`, debug API, orchestrator context.
+- Full-stack HTTP smoke: `python scripts/full_stack_smoke.py --base-url http://127.0.0.1:8000` после `alembic upgrade head`; 2026-04-26 базовый прогон успешно прошёл health, presets, create, text message, debug endpoints, initiative status.
+- Память/инициатива: добавлен SQL-слой `MemoryItem`, daily consolidation из `EventLog` в memory items + semantic summary, decay/access score, internal endpoint `/v1/internal/memory/consolidate`, timezone-aware quiet hours, `scripts/initiative_worker.py`, polling чата в Flutter.
+- В `TODO.md` добавлены будущие требования: wake/addressing policy и speaker recognition для отделения основного пользователя от других участников, знакомство с новым голосом и запоминание имени/голосового профиля.
 
 ## Следующий логичный шаг
 
-- E2e / интеграционные сценарии OpenAPI + Postgres + Qdrant (в т.ч. семантическая память и rollover треда).
-- Расширение пресетов: дельты персонализации, `selected_preset_id` на create по SRS.
-- Консолидация памяти (воркер), importance/decay; инициатива по `ROADMAP.md` этап 7.
+- v4.3 Stage B: conflict/boundaries (`BoundaryResponseService`, новые state/relationship поля, cooldown/repair).
+- Полировка SRS-onboarding: feature-based структура и widget tests.
+- Voice addressing + speaker recognition по новому TODO.

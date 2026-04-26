@@ -277,6 +277,7 @@ class NeuroFriendApi {
     required String archetype,
     String? presetId,
     String? ttsVoice,
+    Map<String, dynamic>? personalization,
   }) async {
     final data = <String, dynamic>{
       'name': name,
@@ -284,7 +285,10 @@ class NeuroFriendApi {
       'identity_lock_confirmed': true,
     };
     if (presetId != null && presetId.isNotEmpty) {
-      data['preset_id'] = presetId;
+      data['selected_preset_id'] = presetId;
+    }
+    if (personalization != null) {
+      data['personalization'] = personalization;
     }
     if (ttsVoice != null && ttsVoice.isNotEmpty) {
       data['tts_voice'] = ttsVoice;

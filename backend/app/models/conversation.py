@@ -4,11 +4,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.datetimeutil import utc_naive_now
+from app.core.types import jsonb_type
 
 
 class ConversationThread(Base):
@@ -48,7 +48,7 @@ class Message(Base):
         nullable=True,
         index=True,
     )
-    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(jsonb_type, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utc_naive_now, index=True)
 
     thread: Mapped[ConversationThread] = relationship(back_populates="messages")

@@ -23,3 +23,14 @@ class RelationshipRead(BaseModel):
     warmth: float
     last_interaction_at: datetime | None
     active_topics_json: list | dict = Field(default_factory=list)
+
+
+class BiographyDebugRead(BaseModel):
+    neurofriend_id: uuid.UUID
+    snapshot: dict[str, Any]
+    consistency_issues: list[str] = Field(default_factory=list)
+
+
+class ExpertiseDebugRead(BaseModel):
+    neurofriend_id: uuid.UUID
+    profile: dict[str, Any]

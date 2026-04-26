@@ -1,4 +1,4 @@
-from app.services.initiative_service import compute_readiness, in_quiet_hours_utc
+from app.services.initiative_service import compute_readiness, in_quiet_hours_for_timezone, in_quiet_hours_utc
 
 
 def test_quiet_hours_span_midnight() -> None:
@@ -39,3 +39,15 @@ def test_readiness_grows_with_gap() -> None:
         strong_gap_h=24.0,
     )
     assert b > a
+
+
+def test_quiet_hours_use_user_timezone() -> None:
+    from datetime import datetime, timezone
+
+    # 19:00 UTC is 23:00 in Europe/Moscow, inside 22-7 local quiet hours.
+    assert in_quiet_hours_for_timezone(
+        datetime(2026, 4, 13, 19, 0, tzinfo=timezone.utc),
+        timezone_name="Europe/Moscow",
+        start_hour=22,
+        end_hour=7,
+    )

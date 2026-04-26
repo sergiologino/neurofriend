@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     """Если задан, `POST /v1/internal/initiative/sweep` требует заголовок `X-Initiative-Sweep-Key` с этим значением."""
     initiative_sweep_secret: str | None = None
 
+    # Addendum v4.3 rollout flags
+    biography_profile_enabled: bool = True
+    expertise_profile_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

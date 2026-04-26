@@ -4,11 +4,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Float, ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.core.datetimeutil import utc_naive_now
+from app.core.types import jsonb_type
 
 
 class InternalStateSnapshot(Base):
@@ -44,4 +44,4 @@ class RelationshipModel(Base):
     attachment: Mapped[float] = mapped_column(Float, default=0.4)
     warmth: Mapped[float] = mapped_column(Float, default=0.5)
     last_interaction_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    active_topics_json: Mapped[list | dict] = mapped_column(JSONB, server_default="[]")
+    active_topics_json: Mapped[list | dict] = mapped_column(jsonb_type, default=list)

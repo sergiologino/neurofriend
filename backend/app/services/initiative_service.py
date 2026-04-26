@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.datetimeutil import utc_naive_now
 from app.models.event_log import EventLog
+from app.models.neurofriend import NeuroFriendProfile
 from app.models.relationship_state import RelationshipModel
+from app.models.user import User
 
 USER_INBOUND_TYPES = frozenset(
     {
@@ -35,6 +38,36 @@ def in_quiet_hours_utc(now_utc: datetime, *, start_hour: int, end_hour: int) -> 
     if start_hour <= end_hour:
         return start_hour <= h < end_hour
     return h >= start_hour or h < end_hour
+
+
+def in_quiet_hours_for_timezone(
+    now_utc: datetime,
+    *,
+    timezone_name: str,
+    start_hour: int,
+    end_hour: int,
+) -> bool:
+    try:
+        local_now = now_utc.astimezone(ZoneInfo(timezone_name))
+    except ZoneInfoNotFoundError:
+        fallback_offsets = {
+            "Europe/Moscow": 3,
+            "UTC": 0,
+        }
+        offset = fallback_offsets.get(timezone_name, 0)
+        local_now = now_utc.astimezone(timezone(timedelta(hours=offset)))
+    return in_quiet_hours_utc(local_now, start_hour=start_hour, end_hour=end_hour)
+
+
+async def get_user_timezone(session: AsyncSession, neurofriend_id: uuid.UUID) -> str:
+    stmt = (
+        select(User.timezone)
+        .join(NeuroFriendProfile, NeuroFriendProfile.user_id == User.id)
+        .where(NeuroFriendProfile.id == neurofriend_id)
+        .limit(1)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none() or "UTC"
 
 
 async def get_last_initiative_out_at(session: AsyncSession, neurofriend_id: uuid.UUID) -> datetime | None:
@@ -107,8 +140,10 @@ async def build_initiative_status(session: AsyncSession, neurofriend_id: uuid.UU
         gap_hours = max(0.0, delta.total_seconds() / 3600.0)
 
     now_utc = datetime.now(timezone.utc)
-    quiet = in_quiet_hours_utc(
+    user_timezone = await get_user_timezone(session, neurofriend_id)
+    quiet = in_quiet_hours_for_timezone(
         now_utc,
+        timezone_name=user_timezone,
         start_hour=settings.initiative_quiet_hours_start_utc,
         end_hour=settings.initiative_quiet_hours_end_utc,
     )
@@ -128,7 +163,8 @@ async def build_initiative_status(session: AsyncSession, neurofriend_id: uuid.UU
         "gap_hours_min": settings.initiative_gap_hours_min,
         "gap_hours_strong": settings.initiative_gap_hours_strong,
         "warmth": warmth,
-        "quiet_hours_utc": [settings.initiative_quiet_hours_start_utc, settings.initiative_quiet_hours_end_utc],
+        "quiet_hours_local": [settings.initiative_quiet_hours_start_utc, settings.initiative_quiet_hours_end_utc],
+        "user_timezone": user_timezone,
     }
     return {
         "last_user_message_at": last_at,

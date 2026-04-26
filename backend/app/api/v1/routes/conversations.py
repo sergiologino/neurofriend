@@ -9,6 +9,7 @@ from app.models.conversation import ConversationThread, Message
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.schemas.neurofriends import MessageCreate, MessageResponse
 from app.services import affect_lite, chat_thread_service, event_service
+from app.services.biography_service import biography_snapshot_text, get_biography_profile
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
 from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
@@ -55,6 +56,7 @@ async def send_text_message(
 
     transcript_ctx = await build_recent_transcript_text(session, nf.id)
     memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=body.text)
+    biography = await get_biography_profile(session, nf.id)
     reply_text = await generate_reply(
         nf=nf,
         core=core,
@@ -63,6 +65,7 @@ async def send_text_message(
         user_text=body.text,
         memory_snippets=memory_snippets,
         conversation_transcript=transcript_ctx,
+        biography_snapshot=biography_snapshot_text(biography),
     )
 
     from app.core.config import get_settings

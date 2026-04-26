@@ -8,6 +8,7 @@ from typing import Any
 from app.core.config import get_settings
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
+from app.services.expertise_service import expertise_snapshot_text, get_expertise_level
 from app.services.openai_client import get_openai_client
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,13 @@ def _fallback_intro(nf: NeuroFriendProfile) -> str:
     )
 
 
-def _identity_system_prompt(nf: NeuroFriendProfile, core: IdentityCore | None) -> str:
+def _identity_system_prompt(
+    nf: NeuroFriendProfile,
+    core: IdentityCore | None,
+    *,
+    biography_snapshot: str | None = None,
+    expertise_profile: dict[str, Any] | None = None,
+) -> str:
     traits_raw = dict((core.core_traits_json if core else {}) or {})
     character_voice = traits_raw.pop("character_voice", None)
     life_legend = traits_raw.pop("life_legend", None)
@@ -55,6 +62,17 @@ def _identity_system_prompt(nf: NeuroFriendProfile, core: IdentityCore | None) -
             "Жизненная легенда (опорная роль для узнаваемости; не выдумывай противоречащее без повода):\n"
             + str(life_legend).strip()
         )
+    if biography_snapshot:
+        lines.append(
+            "Биография личности (фиксированные факты; не противоречь и не дописывай крупные факты на ходу):\n"
+            + biography_snapshot.strip()
+        )
+    expertise_text = expertise_snapshot_text(expertise_profile or (core.expertise_profile_json if core else None))
+    if expertise_text:
+        lines.append(
+            expertise_text
+            + "\nНе изображай эксперта во всём. В слабых зонах отвечай осторожно и не выдавай себя за врача/юриста/финансового советника."
+        )
     lines.append(DIALOGUE_NATURALNESS_RU)
     lines.append(
         "Отвечай естественно, по-человечески, без шаблонов ассистента. "
@@ -65,10 +83,21 @@ def _identity_system_prompt(nf: NeuroFriendProfile, core: IdentityCore | None) -
     return "\n".join(lines)
 
 
-async def generate_intro_message(*, nf: NeuroFriendProfile, core: IdentityCore | None) -> str:
+async def generate_intro_message(
+    *,
+    nf: NeuroFriendProfile,
+    core: IdentityCore | None,
+    biography_snapshot: str | None = None,
+    expertise_profile: dict[str, Any] | None = None,
+) -> str:
     client = get_openai_client()
     settings = get_settings()
-    system = _identity_system_prompt(nf, core) + (
+    system = _identity_system_prompt(
+        nf,
+        core,
+        biography_snapshot=biography_snapshot,
+        expertise_profile=expertise_profile,
+    ) + (
         "\nСгенерируй первое сообщение в чат: как живой человек — коротко о себе, можно мимолётную деталь "
         "«из жизни» в рамках легенды. По возможности закончить не вопросом, а фразой с точкой. Без Markdown."
     )
@@ -100,10 +129,22 @@ async def generate_reply(
     user_text: str,
     memory_snippets: list[str] | None = None,
     conversation_transcript: str | None = None,
+    biography_snapshot: str | None = None,
 ) -> str:
     client = get_openai_client()
     settings = get_settings()
-    system = _identity_system_prompt(nf, core)
+    expertise_profile = core.expertise_profile_json if core else None
+    system = _identity_system_prompt(
+        nf,
+        core,
+        biography_snapshot=biography_snapshot,
+        expertise_profile=expertise_profile,
+    )
+    expertise_level = get_expertise_level(user_text, expertise_profile)
+    system += (
+        f"\nТекущая тема классифицирована по экспертности как: {expertise_level}. "
+        "Подстрой уверенность ответа под этот уровень."
+    )
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог (опирайся на смысл, продолжай связно; не делай вид, что разговор только начался):\n"
