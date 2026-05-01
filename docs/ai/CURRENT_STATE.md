@@ -1,6 +1,6 @@
 # Текущее состояние
 
-**Дата актуализации:** 2026-04-26 (voice wake-by-name MVP)
+**Дата актуализации:** 2026-05-01 (v4.3 Stage C romantic dynamics)
 
 ## Репозиторий
 
@@ -16,9 +16,9 @@
 
 ## Сборка и тесты
 
-- Backend: `pip install -e ".[dev]"` в `backend/`, затем `python -m pytest tests/ -q` (последняя проверка **2026-04-26:** **32 passed**).
+- Backend: `pip install -e ".[dev]"` в `backend/`, затем `python -m pytest tests/ -q` (последняя проверка **2026-05-01:** **47 passed**).
 - Перед запуском API: **локальный PostgreSQL** (рекомендуется), `alembic upgrade head`, `OPENAI_API_KEY`; для семантической памяти — поднять **Qdrant** (`infra/docker-compose.yml` сервис `qdrant` или локально порт 6333) и при необходимости выставить `QDRANT_URL`.
-- Клиент: `flutter pub get`, затем `dart analyze lib` — без замечаний (последняя проверка **2026-04-26**). Полная сборка зависит от окружения (Flutter, Visual Studio для Windows desktop).
+- Клиент: `flutter pub get`, затем `dart analyze lib` — без замечаний (последняя проверка **2026-05-01**). Полная сборка зависит от окружения (Flutter, Visual Studio для Windows desktop).
 
 ## Известные ограничения (UX)
 
@@ -41,9 +41,10 @@
 - Память/инициатива: добавлен SQL-слой `MemoryItem`, daily consolidation из `EventLog` в memory items + semantic summary, decay/access score, internal endpoint `/v1/internal/memory/consolidate`, timezone-aware quiet hours, `scripts/initiative_worker.py`, polling чата в Flutter.
 - Stage B conflict/boundaries: добавлен `boundary_response_enabled`, поля conflict/boundary в `InternalStateSnapshot` и `RelationshipModel`, `BoundaryResponseService`, подавление инициативы при конфликте, boundary context в orchestrator, анти-лесть в naturalness prompt.
 - Voice participants/wake MVP: `ConversationParticipant`, `speaker_recognition_enabled`, `voice_addressing_enabled`, распознавание первого/нового голоса через `wav_acoustic_mvp`, сохранение имени при самопредставлении, speaker metadata в voice events/messages, `/debug/participants`, backend `wake_check` policy, `playback_guard_text` + recent assistant history guard против self-echo, STT hallucination guard на тишине/YouTube-фразах и Flutter hands-free режим "слушать имя" с возможностью перебить TTS. Onboarding показывает мягкое предупреждение при возможном mismatch имени и gender-style манеры.
+- v4.3 Stage C (романтическая/межличностная динамика): флаг `romantic_dynamics_enabled`; поля `affection`, `romantic_interest`, `flirt_comfort`, `emotional_intimacy` в снимке состояния; в отношениях — `bond_type`, `affection_score`, `romantic_tension_score`, `emotional_intimacy_score`; сервис `attachment_dynamics_service` (медленное наращивание близости, гейт по intimacy перед ростом romantic tension, учёт boundary/repair); контекст в `generate_reply` и `generate_initiative_ping`; Alembic `20260426_7`.
 
 ## Следующий логичный шаг
 
-- v4.3 Stage C: romantic/interpersonal dynamics.
+- Полировка Stage C: классификация сигналов, инспектор связи/TTS.
 - Полировка voice participants: реальные speaker embeddings/voiceprint, diarization, echo cancellation/VAD, enrollment/consent UX.
 - Полировка SRS-onboarding: feature-based структура и widget tests.

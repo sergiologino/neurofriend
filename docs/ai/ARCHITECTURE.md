@@ -66,6 +66,11 @@ Application/
 - `POST /v1/perception/audio` — **с этапа голосового MVP** (Whisper + нормализация в событие); `POST /v1/perception/vision` — позже.
 - Эндпоинты чтения для **отладочного UI:** лента событий/отношений (см. `ROADMAP.md`, этап 4).
 
+### Межличностная динамика (addendum v4.3 Stage C)
+
+- Накопительные метрики в `relationship_models` (`bond_type`, affection / emotional intimacy / romantic tension scores) и зеркальные поля в последнем `internal_state_snapshots`; обновление на каждом входящем тексте/транскрипте в `affect_lite.snapshot_after_user_text` при включённом `romantic_dynamics_enabled`.
+- Логика медленной прогрессии и границ: `app/services/attachment_dynamics_service.py`; контекст для LLM — `romantic_prompt_context` в `generate_reply` и `generate_initiative_ping`.
+
 ### Реализованные HTTP-поверхности (backend)
 
 - `GET /health`, `GET /v1/health`

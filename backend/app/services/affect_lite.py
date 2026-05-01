@@ -7,8 +7,11 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.datetimeutil import utc_naive_now
+from app.models.neurofriend import NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
+from app.services import attachment_dynamics_service
 from app.services.boundary_response_service import apply_boundary_to_state, update_relationship_boundary
 
 
@@ -45,6 +48,34 @@ async def snapshot_after_user_text(
         hurt = min(1.0, hurt + 0.05)
     boundary = apply_boundary_to_state(previous=prev, text=user_text, valence=v, hurt=hurt, safety=safety)
 
+    romantic_fields = {
+        "affection": float(prev.affection) if prev else 0.35,
+        "romantic_interest": float(prev.romantic_interest) if prev else 0.12,
+        "flirt_comfort": float(prev.flirt_comfort) if prev else 0.22,
+        "emotional_intimacy": float(prev.emotional_intimacy) if prev else 0.18,
+    }
+    settings = get_settings()
+    rel_stmt = select(RelationshipModel).where(
+        RelationshipModel.neurofriend_id == neurofriend_id,
+        RelationshipModel.person_ref == "user_main",
+    )
+    rel_row = await session.execute(rel_stmt)
+    rel = rel_row.scalar_one_or_none()
+    nf_row = await session.get(NeuroFriendProfile, neurofriend_id)
+    archetype = nf_row.archetype if nf_row else "companion"
+    if settings.romantic_dynamics_enabled and rel:
+        romantic_fields = attachment_dynamics_service.update_affection_after_event(
+            previous_state=prev,
+            rel=rel,
+            user_text=user_text,
+            archetype=archetype,
+            boundary_mode=str(boundary["boundary_mode"]),
+            friction=float(boundary["friction"]),
+            boundary_alert=float(boundary["boundary_alert"]),
+            valence=float(boundary["valence"]),
+        )
+        await session.flush()
+
     snap = InternalStateSnapshot(
         neurofriend_id=neurofriend_id,
         valence=float(boundary["valence"]),
@@ -59,6 +90,10 @@ async def snapshot_after_user_text(
         respect_signal=float(boundary["respect_signal"]),
         self_respect_activation=float(boundary["self_respect_activation"]),
         boundary_alert=float(boundary["boundary_alert"]),
+        affection=float(romantic_fields["affection"]),
+        romantic_interest=float(romantic_fields["romantic_interest"]),
+        flirt_comfort=float(romantic_fields["flirt_comfort"]),
+        emotional_intimacy=float(romantic_fields["emotional_intimacy"]),
     )
     session.add(snap)
     await session.flush()

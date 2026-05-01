@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     biography_profile_enabled: bool = True
     expertise_profile_enabled: bool = True
     boundary_response_enabled: bool = True
+    romantic_dynamics_enabled: bool = True
     speaker_recognition_enabled: bool = True
     voice_addressing_enabled: bool = True
 

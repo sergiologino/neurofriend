@@ -32,6 +32,10 @@ class InternalStateSnapshot(Base):
     respect_signal: Mapped[float] = mapped_column(Float, default=0.5)
     self_respect_activation: Mapped[float] = mapped_column(Float, default=0.0)
     boundary_alert: Mapped[float] = mapped_column(Float, default=0.0)
+    affection: Mapped[float] = mapped_column(Float, default=0.35)
+    romantic_interest: Mapped[float] = mapped_column(Float, default=0.12)
+    flirt_comfort: Mapped[float] = mapped_column(Float, default=0.22)
+    emotional_intimacy: Mapped[float] = mapped_column(Float, default=0.18)
 
 
 class RelationshipModel(Base):
@@ -51,5 +55,9 @@ class RelationshipModel(Base):
     repair_receptivity: Mapped[float] = mapped_column(Float, default=0.5)
     respect_baseline: Mapped[float] = mapped_column(Float, default=0.5)
     boundary_safety_score: Mapped[float] = mapped_column(Float, default=0.7)
+    bond_type: Mapped[str] = mapped_column(String(48), default="platonic")
+    affection_score: Mapped[float] = mapped_column(Float, default=0.35)
+    romantic_tension_score: Mapped[float] = mapped_column(Float, default=0.12)
+    emotional_intimacy_score: Mapped[float] = mapped_column(Float, default=0.18)
     last_interaction_at: Mapped[datetime | None] = mapped_column(nullable=True)
     active_topics_json: Mapped[list | dict] = mapped_column(jsonb_type, default=list)

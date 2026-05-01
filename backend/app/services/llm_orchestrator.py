@@ -8,6 +8,7 @@ from typing import Any
 from app.core.config import get_settings
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
+from app.services.attachment_dynamics_service import romantic_prompt_context
 from app.services.boundary_response_service import boundary_prompt_context
 from app.services.expertise_service import expertise_snapshot_text, get_expertise_level
 from app.services.openai_client import get_openai_client
@@ -170,6 +171,10 @@ async def generate_reply(
     boundary_context = boundary_prompt_context(state, rel)
     if boundary_context:
         system += "\n" + boundary_context
+    if settings.romantic_dynamics_enabled:
+        romantic_ctx = romantic_prompt_context(state, rel)
+        if romantic_ctx:
+            system += "\n" + romantic_ctx
     if memory_snippets:
         system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:12])
 
@@ -226,6 +231,10 @@ async def generate_initiative_ping(
     boundary_context = boundary_prompt_context(state, rel)
     if boundary_context:
         system += "\n" + boundary_context
+    if settings.romantic_dynamics_enabled:
+        romantic_ctx = romantic_prompt_context(state, rel)
+        if romantic_ctx:
+            system += "\n" + romantic_ctx
     if memory_snippets:
         system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:12])
     system += (

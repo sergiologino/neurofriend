@@ -17,14 +17,14 @@
 | 6 — Память / семантика | Частично: Qdrant + embeddings + retrieval + индексация; консолидация/decay впереди |
 | 7 — Инициатива, gap, push | Частично: status, sweep, LLM-пинг, чат, Redis; push, TZ пользователя, worker без HTTP впереди |
 | 8 — Observability, смена голоса | Не начато / точечно |
-| v4.3 — Biography, expertise, boundaries, romance, capabilities, reminders | Stage A первая итерация реализована; Stage B–E впереди |
+| v4.3 — Biography, expertise, boundaries, romance, capabilities, reminders | Stage A–C первая итерация реализована; Stage D–E впереди |
 
 ## Ближайший порядок реализации
 
-1. **v4.3 Stage C — романтическая и межличностная динамика:** медленное развитие близости, attachment dynamics, boundary/consent checks.
-2. **Полировка voice participants:** заменить MVP audio hash на реальные speaker embeddings/voiceprint, добавить явное согласие/управление участниками в UI.
-3. **Полировка памяти и инициативы:** подключить consolidation worker к реальному scheduler/deployment, добавить retrieval из SQL memory в orchestrator рядом с Qdrant, расширить push вместо polling.
-4. **Полировка SRS-onboarding:** вынести экраны из `HomePage` в feature-based структуру, добавить widget tests и пользовательский biography/expertise preview.
+1. **Полировка voice participants:** заменить MVP audio hash на реальные speaker embeddings/voiceprint, добавить явное согласие/управление участниками в UI.
+2. **Полировка памяти и инициативы:** подключить consolidation worker к реальному scheduler/deployment, добавить retrieval из SQL memory в orchestrator рядом с Qdrant, расширить push вместо polling.
+3. **Полировка SRS-onboarding:** вынести экраны из `HomePage` в feature-based структуру, добавить widget tests и пользовательский biography/expertise preview.
+4. **Полировка Stage C (романтическая динамика):** классификация романтических сигналов (LLM/модель вместо словарей), показ bond/scores в инспекторе, связка с интонацией TTS.
 5. **Full-stack smoke с медиа:** базовый HTTP smoke пройден; отдельно проверить TTS/voice с `OPENAI_API_KEY`, аудиофайлом и Qdrant retrieval в окружении с ключами.
 6. **Observability:** request id, timing middleware, метрики OpenAI/Qdrant/DB и стоимость LLM/STT/TTS.
 
@@ -103,24 +103,21 @@
 
 ## v4.3 Stage C — Romantic Dynamics
 
-Цель: медленная межличностная динамика, не «эротический режим» и не fast-forward близости.
+Статус: первая итерация реализована 2026-05-01.
 
-1. Добавить feature flag `romantic_dynamics_enabled`.
-2. Расширить `InternalStateSnapshot`: `affection`, `romantic_interest`, `flirt_comfort`, `emotional_intimacy`.
-3. Расширить `RelationshipModel`: `bond_type`, `affection_score`, `romantic_tension_score`, `emotional_intimacy_score`.
-4. Реализовать `AttachmentDynamicsService`:
-   - `update_affection_after_event()`
-   - `evaluate_romantic_signal()`
-   - `update_bond_type()`
-   - `should_allow_flirtation()`
-   - `boundary_check()`
-5. Подключить gradual progression rules:
-   - комфорт → тёплая привычность → мягкие комплименты → эмоциональная значимость → осторожная романтическая окраска;
-   - только по истории и отклику пользователя.
-6. Тесты:
-   - невозможность мгновенного перехода в romantic state;
-   - учёт границ и repair;
-   - разные архетипы имеют разные baseline tendencies.
+Сделано:
+- feature flag `romantic_dynamics_enabled` (Settings / env);
+- поля в `InternalStateSnapshot`: `affection`, `romantic_interest`, `flirt_comfort`, `emotional_intimacy`;
+- поля в `RelationshipModel`: `bond_type`, `affection_score`, `romantic_tension_score`, `emotional_intimacy_score`; миграция `20260426_7`;
+- модуль `attachment_dynamics_service`: `update_affection_after_event`, `evaluate_romantic_signal`, `evaluate_warmth_signal`, `boundary_check`, `should_allow_flirtation`, `update_bond_type`, `compute_bond_type`, `archetype_romantic_baseline`, `romantic_prompt_context`;
+- ограничение прироста за один ход пользователя + гейт по `emotional_intimacy`/`affection` перед ростом `romantic_tension`; тип связи `bond_type` (platonic → … → romantic_soft) без мгновенного скачка из дефолта;
+- учёт конфликта/границ и режима `repair_opening`; контекст в LLM для ответа и инициативного пинга;
+- `tests/test_attachment_dynamics.py`.
+
+Осталось на будущую полировку:
+- заменить словарные эвристики романтики на классификацию через LLM/модель;
+- отображение bond/scores в Flutter-инспекторе;
+- связь уровня связи с голосом/TTS (просодика).
 
 ## v4.3 Stage D — Device Assistance / Capabilities
 
