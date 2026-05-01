@@ -38,6 +38,24 @@ class Settings(BaseSettings):
     chat_max_messages_per_thread: int = 500
     chat_carryover_messages: int = 10
 
+    # Инициатива (этап 7), эвристики UTC
+    initiative_enabled: bool = True
+    initiative_gap_hours_min: float = 4.0
+    initiative_gap_hours_strong: float = 24.0
+    initiative_readiness_threshold: float = 0.55
+    initiative_quiet_hours_start_utc: int = 22
+    initiative_quiet_hours_end_utc: int = 7
+    initiative_cooldown_hours: float = 12.0
+    """Если задан, `POST /v1/internal/initiative/sweep` требует заголовок `X-Initiative-Sweep-Key` с этим значением."""
+    initiative_sweep_secret: str | None = None
+
+    # Addendum v4.3 rollout flags
+    biography_profile_enabled: bool = True
+    expertise_profile_enabled: bool = True
+    boundary_response_enabled: bool = True
+    speaker_recognition_enabled: bool = True
+    voice_addressing_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

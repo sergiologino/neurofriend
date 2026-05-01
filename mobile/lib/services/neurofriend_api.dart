@@ -78,6 +78,23 @@ class PersonalityPreset {
   }
 }
 
+/// Элемент `GET /v1/meta/tts-voices` — голос OpenAI TTS под манеру пресета.
+class TtsVoiceOption {
+  TtsVoiceOption({required this.id, required this.label, required this.gender});
+
+  factory TtsVoiceOption.fromJson(Map<String, dynamic> json) {
+    return TtsVoiceOption(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      gender: json['gender'] as String,
+    );
+  }
+
+  final String id;
+  final String label;
+  final String gender;
+}
+
 class ChatMessage {
   ChatMessage({
     required this.id,
@@ -139,6 +156,7 @@ class VoiceTurnResult {
     required this.replyText,
     required this.audioBase64,
     required this.neurofriendId,
+    required this.meta,
   });
 
   factory VoiceTurnResult.fromJson(Map<String, dynamic> json) {
@@ -147,6 +165,7 @@ class VoiceTurnResult {
       replyText: json['reply_text'] as String,
       audioBase64: json['audio_base64'] as String,
       neurofriendId: json['neurofriend_id'] as String,
+      meta: Map<String, dynamic>.from(json['meta'] as Map? ?? const <String, dynamic>{}),
     );
   }
 
@@ -154,6 +173,9 @@ class VoiceTurnResult {
   final String replyText;
   final String audioBase64;
   final String neurofriendId;
+  final Map<String, dynamic> meta;
+
+  bool get addressedToNeurofriend => meta['addressed_to_neurofriend'] as bool? ?? true;
 }
 
 class TextReplyResult {
@@ -164,6 +186,21 @@ class TextReplyResult {
   }
 
   final String replyText;
+}
+
+/// Ответ `POST /v1/perception/tts` — озвучка готового текста (intro, чат, повтор).
+class TtsResult {
+  TtsResult({required this.audioBase64, this.meta});
+
+  factory TtsResult.fromJson(Map<String, dynamic> json) {
+    return TtsResult(
+      audioBase64: json['audio_base64'] as String,
+      meta: json['meta'] as Map<String, dynamic>?,
+    );
+  }
+
+  final String audioBase64;
+  final Map<String, dynamic>? meta;
 }
 
 class DebugEventItem {
@@ -244,6 +281,8 @@ class NeuroFriendApi {
     required String name,
     required String archetype,
     String? presetId,
+    String? ttsVoice,
+    Map<String, dynamic>? personalization,
   }) async {
     final data = <String, dynamic>{
       'name': name,
@@ -251,7 +290,13 @@ class NeuroFriendApi {
       'identity_lock_confirmed': true,
     };
     if (presetId != null && presetId.isNotEmpty) {
-      data['preset_id'] = presetId;
+      data['selected_preset_id'] = presetId;
+    }
+    if (personalization != null) {
+      data['personalization'] = personalization;
+    }
+    if (ttsVoice != null && ttsVoice.isNotEmpty) {
+      data['tts_voice'] = ttsVoice;
     }
     final response = await _dio.post<Map<String, dynamic>>(
       '/v1/neurofriends',
@@ -275,9 +320,46 @@ class NeuroFriendApi {
     return TextReplyResult.fromJson(response.data!);
   }
 
-  Future<VoiceTurnResult> sendVoiceAudio(String neurofriendId, String audioFilePath) async {
+  Future<TtsResult> synthesizeSpeech(String neurofriendId, String text) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/perception/tts',
+      data: <String, dynamic>{
+        'neurofriend_id': neurofriendId,
+        'text': text,
+      },
+    );
+    return TtsResult.fromJson(response.data!);
+  }
+
+  /// До создания нейродруга: тот же TTS, что после диалога (`POST /v1/meta/tts-preview`).
+  Future<TtsResult> previewTts({
+    required String ttsVoice,
+    String? genderStyle,
+    String? text,
+  }) async {
+    final data = <String, dynamic>{
+      'tts_voice': ttsVoice,
+      if (genderStyle != null && genderStyle.isNotEmpty) 'gender_style': genderStyle,
+      if (text != null && text.trim().isNotEmpty) 'text': text.trim(),
+    };
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/v1/meta/tts-preview',
+      data: data,
+    );
+    return TtsResult.fromJson(response.data!);
+  }
+
+  Future<VoiceTurnResult> sendVoiceAudio(
+    String neurofriendId,
+    String audioFilePath, {
+    bool wakeCheck = false,
+    String? playbackGuardText,
+  }) async {
     final formData = FormData.fromMap(<String, dynamic>{
       'neurofriend_id': neurofriendId,
+      'wake_check': wakeCheck,
+      if (playbackGuardText != null && playbackGuardText.trim().isNotEmpty)
+        'playback_guard_text': playbackGuardText.trim(),
       'audio': await MultipartFile.fromFile(audioFilePath, filename: 'audio.wav'),
     });
     final response = await _dio.post<Map<String, dynamic>>(
@@ -314,6 +396,22 @@ class NeuroFriendApi {
     return data
         .whereType<Map>()
         .map((e) => PersonalityPreset.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  /// Список голосов TTS для [genderStyle] пресета (`masculine` / `feminine` / `neutral` или null).
+  Future<List<TtsVoiceOption>> getTtsVoices({String? genderStyle}) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/meta/tts-voices',
+      queryParameters: <String, dynamic>{
+        if (genderStyle != null && genderStyle.isNotEmpty) 'gender_style': genderStyle,
+      },
+    );
+    final data = response.data;
+    if (data is! List) return <TtsVoiceOption>[];
+    return data
+        .whereType<Map>()
+        .map((e) => TtsVoiceOption.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 

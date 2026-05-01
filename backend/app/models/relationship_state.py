@@ -4,11 +4,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Float, ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.core.datetimeutil import utc_naive_now
+from app.core.types import jsonb_type
 
 
 class InternalStateSnapshot(Base):
@@ -28,6 +28,10 @@ class InternalStateSnapshot(Base):
     curiosity: Mapped[float] = mapped_column(Float, default=0.5)
     loneliness: Mapped[float] = mapped_column(Float, default=0.0)
     hurt: Mapped[float] = mapped_column(Float, default=0.0)
+    friction: Mapped[float] = mapped_column(Float, default=0.0)
+    respect_signal: Mapped[float] = mapped_column(Float, default=0.5)
+    self_respect_activation: Mapped[float] = mapped_column(Float, default=0.0)
+    boundary_alert: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class RelationshipModel(Base):
@@ -43,5 +47,9 @@ class RelationshipModel(Base):
     trust: Mapped[float] = mapped_column(Float, default=0.5)
     attachment: Mapped[float] = mapped_column(Float, default=0.4)
     warmth: Mapped[float] = mapped_column(Float, default=0.5)
+    conflict_memory_score: Mapped[float] = mapped_column(Float, default=0.0)
+    repair_receptivity: Mapped[float] = mapped_column(Float, default=0.5)
+    respect_baseline: Mapped[float] = mapped_column(Float, default=0.5)
+    boundary_safety_score: Mapped[float] = mapped_column(Float, default=0.7)
     last_interaction_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    active_topics_json: Mapped[list | dict] = mapped_column(JSONB, server_default="[]")
+    active_topics_json: Mapped[list | dict] = mapped_column(jsonb_type, default=list)

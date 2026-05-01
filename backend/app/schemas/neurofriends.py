@@ -12,6 +12,16 @@ class TemperamentIn(BaseModel):
     emotionality: float = 0.5
 
 
+class PersonalizationIn(BaseModel):
+    softness_delta: float = Field(0.0, ge=-1.0, le=1.0)
+    directness_delta: float = Field(0.0, ge=-1.0, le=1.0)
+    initiative_delta: float = Field(0.0, ge=-1.0, le=1.0)
+    emotionality_delta: float = Field(0.0, ge=-1.0, le=1.0)
+    humor_delta: float = Field(0.0, ge=-1.0, le=1.0)
+    reply_length_preference: str | None = Field(None, max_length=64)
+    closeness_preference: str | None = Field(None, max_length=64)
+
+
 class NeuroFriendCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     gender_style: str | None = None
@@ -19,12 +29,22 @@ class NeuroFriendCreateRequest(BaseModel):
     archetype: str = Field(..., min_length=1, max_length=120)
     """Если задан, backend подмешивает темперамент и стиль из каталога `personality_presets.json`."""
     preset_id: str | None = Field(None, max_length=64)
+    """SRS-имя поля; если задано, имеет приоритет над legacy `preset_id`."""
+    selected_preset_id: str | None = Field(None, max_length=64)
     temperament: TemperamentIn | None = None
+    personalization: PersonalizationIn | None = None
     social_style: str | None = None
     speech_style: str | None = None
     relationship_style: str | None = None
     identity_lock_confirmed: bool = False
     user_display_name: str | None = Field(None, max_length=200)
+    user_timezone: str | None = Field(None, max_length=64)
+    """Голос OpenAI TTS; должен соответствовать `gender_style` (после слияния с пресетом)."""
+    tts_voice: str | None = Field(None, max_length=32)
+
+
+class NeuroFriendPatchRequest(BaseModel):
+    tts_voice: str | None = Field(None, max_length=32)
 
 
 class NeuroFriendCreateResponse(BaseModel):

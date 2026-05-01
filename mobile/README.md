@@ -13,6 +13,7 @@
 - Лента чата из активного треда (`GET .../threads/active/messages`), pull-to-refresh; текст сообщений **выделяется** (копирование в буфер обмена).
 - Текстовый ввод → `POST .../messages`.
 - Запись WAV → `POST /v1/perception/audio`, воспроизведение ответа TTS (MP3 base64).
+- Озвучка intro и ответов на **текст** через `POST /v1/perception/tts` (тот же TTS); в чате переключатель и повтор по кнопке у сообщения ассистента.
 - Экран **Инспектор** (события + primary relationship) через debug API.
 
 Зависимости: `dio`, `flutter_riverpod`, `record`, `path_provider`, `audioplayers`, `shared_preferences`.

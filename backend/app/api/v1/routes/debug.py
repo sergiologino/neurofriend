@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_session
 from app.models.event_log import EventLog
+from app.models.neurofriend import IdentityCore
+from app.models.participant import ConversationParticipant
 from app.models.relationship_state import RelationshipModel
-from app.schemas.debug import EventTimelineItem, RelationshipRead
+from app.schemas.debug import BiographyDebugRead, EventTimelineItem, ExpertiseDebugRead, ParticipantDebugRead, RelationshipRead
+from app.services.biography_service import get_biography_profile, get_biography_snapshot, validate_biography_consistency
 
 router = APIRouter()
 
@@ -64,6 +67,67 @@ async def debug_primary_relationship(
         trust=rel.trust,
         attachment=rel.attachment,
         warmth=rel.warmth,
+        conflict_memory_score=rel.conflict_memory_score,
+        repair_receptivity=rel.repair_receptivity,
+        respect_baseline=rel.respect_baseline,
+        boundary_safety_score=rel.boundary_safety_score,
         last_interaction_at=rel.last_interaction_at,
         active_topics_json=rel.active_topics_json if isinstance(rel.active_topics_json, list) else [],
     )
+
+
+@router.get("/neurofriends/{neurofriend_id}/debug/biography", response_model=BiographyDebugRead)
+async def debug_biography(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> BiographyDebugRead:
+    profile = await get_biography_profile(session, neurofriend_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Biography not found")
+    return BiographyDebugRead(
+        neurofriend_id=neurofriend_id,
+        snapshot=get_biography_snapshot(profile),
+        consistency_issues=validate_biography_consistency(profile),
+    )
+
+
+@router.get("/neurofriends/{neurofriend_id}/debug/expertise", response_model=ExpertiseDebugRead)
+async def debug_expertise(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> ExpertiseDebugRead:
+    result = await session.execute(select(IdentityCore).where(IdentityCore.neurofriend_id == neurofriend_id))
+    core = result.scalar_one_or_none()
+    if not core:
+        raise HTTPException(status_code=404, detail="Identity core not found")
+    return ExpertiseDebugRead(
+        neurofriend_id=neurofriend_id,
+        profile=core.expertise_profile_json or {},
+    )
+
+
+@router.get("/neurofriends/{neurofriend_id}/debug/participants", response_model=list[ParticipantDebugRead])
+async def debug_participants(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> list[ParticipantDebugRead]:
+    result = await session.execute(
+        select(ConversationParticipant)
+        .where(ConversationParticipant.neurofriend_id == neurofriend_id)
+        .order_by(ConversationParticipant.first_seen_at.asc())
+    )
+    return [
+        ParticipantDebugRead(
+            id=p.id,
+            person_ref=p.person_ref,
+            display_name=p.display_name,
+            participant_kind=p.participant_kind,
+            voiceprint_confidence=p.voiceprint_confidence,
+            consent_status=p.consent_status,
+            first_seen_at=p.first_seen_at,
+            last_seen_at=p.last_seen_at,
+            turns_seen=p.turns_seen,
+            voiceprint_json=p.voiceprint_json,
+        )
+        for p in result.scalars().all()
+    ]
