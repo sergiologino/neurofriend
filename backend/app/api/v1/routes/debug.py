@@ -10,8 +10,16 @@ from app.models.event_log import EventLog
 from app.models.neurofriend import IdentityCore
 from app.models.participant import ConversationParticipant
 from app.models.relationship_state import RelationshipModel
-from app.schemas.debug import BiographyDebugRead, EventTimelineItem, ExpertiseDebugRead, ParticipantDebugRead, RelationshipRead
+from app.schemas.debug import (
+    BiographyDebugRead,
+    EventTimelineItem,
+    ExpertiseDebugRead,
+    ParticipantDebugRead,
+    ParticipantPatch,
+    RelationshipRead,
+)
 from app.services.biography_service import get_biography_profile, get_biography_snapshot, validate_biography_consistency
+from app.services.speaker_identity_service import ASSISTANT_SELF_REF
 
 router = APIRouter()
 
@@ -71,6 +79,10 @@ async def debug_primary_relationship(
         repair_receptivity=rel.repair_receptivity,
         respect_baseline=rel.respect_baseline,
         boundary_safety_score=rel.boundary_safety_score,
+        bond_type=rel.bond_type,
+        affection_score=rel.affection_score,
+        romantic_tension_score=rel.romantic_tension_score,
+        emotional_intimacy_score=rel.emotional_intimacy_score,
         last_interaction_at=rel.last_interaction_at,
         active_topics_json=rel.active_topics_json if isinstance(rel.active_topics_json, list) else [],
     )
@@ -106,6 +118,21 @@ async def debug_expertise(
     )
 
 
+def _participant_read(p: ConversationParticipant) -> ParticipantDebugRead:
+    return ParticipantDebugRead(
+        id=p.id,
+        person_ref=p.person_ref,
+        display_name=p.display_name,
+        participant_kind=p.participant_kind,
+        voiceprint_confidence=p.voiceprint_confidence,
+        consent_status=p.consent_status,
+        first_seen_at=p.first_seen_at,
+        last_seen_at=p.last_seen_at,
+        turns_seen=p.turns_seen,
+        voiceprint_json=p.voiceprint_json,
+    )
+
+
 @router.get("/neurofriends/{neurofriend_id}/debug/participants", response_model=list[ParticipantDebugRead])
 async def debug_participants(
     neurofriend_id: uuid.UUID,
@@ -116,18 +143,36 @@ async def debug_participants(
         .where(ConversationParticipant.neurofriend_id == neurofriend_id)
         .order_by(ConversationParticipant.first_seen_at.asc())
     )
-    return [
-        ParticipantDebugRead(
-            id=p.id,
-            person_ref=p.person_ref,
-            display_name=p.display_name,
-            participant_kind=p.participant_kind,
-            voiceprint_confidence=p.voiceprint_confidence,
-            consent_status=p.consent_status,
-            first_seen_at=p.first_seen_at,
-            last_seen_at=p.last_seen_at,
-            turns_seen=p.turns_seen,
-            voiceprint_json=p.voiceprint_json,
+    return [_participant_read(p) for p in result.scalars().all()]
+
+
+@router.patch(
+    "/neurofriends/{neurofriend_id}/debug/participants/{participant_id}",
+    response_model=ParticipantDebugRead,
+)
+async def patch_debug_participant(
+    neurofriend_id: uuid.UUID,
+    participant_id: uuid.UUID,
+    body: ParticipantPatch,
+    session: AsyncSession = Depends(get_session),
+) -> ParticipantDebugRead:
+    """Переименование участника и согласие на дообучение MVP-voiceprint (debug)."""
+    result = await session.execute(
+        select(ConversationParticipant).where(
+            ConversationParticipant.id == participant_id,
+            ConversationParticipant.neurofriend_id == neurofriend_id,
         )
-        for p in result.scalars().all()
-    ]
+    )
+    p = result.scalar_one_or_none()
+    if p is None:
+        raise HTTPException(status_code=404, detail="Participant not found")
+    if body.consent_status is not None and p.person_ref == ASSISTANT_SELF_REF:
+        raise HTTPException(status_code=400, detail="Cannot change consent for assistant_self")
+    if body.display_name is not None:
+        stripped = body.display_name.strip()
+        p.display_name = stripped if stripped else None
+    if body.consent_status is not None:
+        p.consent_status = body.consent_status
+    await session.commit()
+    await session.refresh(p)
+    return _participant_read(p)

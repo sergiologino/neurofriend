@@ -317,7 +317,7 @@ async def perception_audio(
     )
 
     transcript_ctx = await build_recent_transcript_text(session, nf.id)
-    memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=transcript)
+    memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=transcript, session=session)
     biography = await get_biography_profile(session, nf.id)
     reply_text = await generate_reply(
         nf=nf,

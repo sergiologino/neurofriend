@@ -79,8 +79,10 @@ Application/
 - `POST /v1/perception/tts` (JSON: `neurofriend_id`, `text`) — TTS для готового текста (intro, ответ из чата, повтор без повторного LLM)
 - `POST /v1/conversations/{neurofriend_id}/messages`, `GET .../threads/active/messages`, `GET .../threads/archived`
 - `GET /v1/neurofriends/{id}/debug/events`, `GET .../debug/relationships/primary`
+- `GET /v1/neurofriends/{id}/debug/participants`, `PATCH .../debug/participants/{participant_id}` — участники голоса (имя, согласие на дообучение MVP-отпечатка)
 - `GET /v1/neurofriends/{id}/initiative/status` — gap, тихие часы, readiness (этап 7, отладка)
 - `POST /v1/internal/initiative/sweep` — заголовок `X-Initiative-Sweep-Key` + `INITIATIVE_SWEEP_SECRET` в env; перебор профилей, генерация исходящей реплики при условиях, запись в чат и событие `initiative_message_out`
+- `POST /v1/internal/memory/consolidate`, `POST /v1/internal/memory/consolidate-all` — то же для SQL memory consolidation (один профиль / все)
 - `GET /v1/meta/personality-presets` — каталог пресетов для онбординга (канонический JSON: `backend/app/data/personality_presets.json`)
 
 ### Семантическая память (этап 6)
@@ -88,7 +90,8 @@ Application/
 - **Qdrant** — векторное хранилище; коллекция задаётся `QDRANT_COLLECTION_SEMANTIC` (по умолчанию `neurofriend_semantic`).
 - **Эмбеддинги** — OpenAI (`EMBEDDING_MODEL`, размер вектора `EMBEDDING_VECTOR_SIZE` = 1536 для `text-embedding-3-small`).
 - **Индексация** — после успешного ответа (голос/текст) и при bootstrap intro; payload: текст, роль, источник, `event_id`, `neurofriend_id`.
-- **Retrieval** — перед вызовом LLM; сниппеты передаются в `generate_reply` как `memory_snippets`. При недоступности Qdrant или ключа OpenAI — деградация без падения запроса.
+- **SQL `memory_items`** — консолидация из `EventLog` (`memory_consolidation`), decay/access; retrieval через `sql_memory_retrieval` при вызове `retrieve_snippets(..., session=...)` совместно с Qdrant (дедуп, приоритет векторным попаданиям); выключение: `SQL_MEMORY_RETRIEVAL_ENABLED=false`.
+- **Retrieval** — перед вызовом LLM; сниппеты в `generate_reply` / инициатива. При недоступности Qdrant или ключа OpenAI — деградация без падения; SQL-слой доступен при живой БД и переданной сессии.
 
 
 ## Пресеты личности (UI + backend)

@@ -281,12 +281,16 @@ async def _find_by_voiceprint(
         if distance is not None and (best is None or distance < best[1]):
             best = (participant, distance)
     if best is not None and best[1] <= VOICEPRINT_MATCH_DISTANCE:
-        vp = dict(best[0].voiceprint_json or {})
-        vp["features"] = blend_voice_features(vp.get("features") or [], features or [])
-        vp["last_distance"] = round(best[1], 4)
-        best[0].voiceprint_json = vp
-        best[0].voiceprint_confidence = min(0.95, max(float(best[0].voiceprint_confidence or 0.0), 1.0 - best[1]))
-        return best[0]
+        participant = best[0]
+        if participant.consent_status != "declined":
+            vp = dict(participant.voiceprint_json or {})
+            vp["features"] = blend_voice_features(vp.get("features") or [], features or [])
+            vp["last_distance"] = round(best[1], 4)
+            participant.voiceprint_json = vp
+            participant.voiceprint_confidence = min(
+                0.95, max(float(participant.voiceprint_confidence or 0.0), 1.0 - best[1])
+            )
+        return participant
     return None
 
 

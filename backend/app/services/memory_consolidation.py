@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.datetimeutil import utc_naive_now
 from app.models.event_log import EventLog
 from app.models.memory_item import MemoryItem
+from app.models.neurofriend import NeuroFriendProfile
 
 EMOTIONAL_WORDS = ("люблю", "ненавижу", "страшно", "грустно", "рад", "важно", "больно", "спасибо")
 IDENTITY_WORDS = ("я ", "меня", "мне", "мой", "моя", "помни", "запомни", "важно")
@@ -144,3 +145,16 @@ async def run_consolidation_for_neurofriend(session: AsyncSession, neurofriend_i
         "decayed_memory_items": decayed,
         "created_summary": summary is not None,
     }
+
+
+async def run_consolidation_all_neurofriends(session: AsyncSession) -> dict:
+    """Проход всех нейродрузей для cron/воркера (один commit снаружи)."""
+    r = await session.execute(select(NeuroFriendProfile.id))
+    ids = [row[0] for row in r.all()]
+    details: list[dict] = []
+    created_total = 0
+    for nid in ids:
+        res = await run_consolidation_for_neurofriend(session, nid)
+        created_total += int(res["created_memory_items"])
+        details.append({"neurofriend_id": str(nid), **res})
+    return {"neurofriends": len(ids), "memory_items_created": created_total, "details": details}

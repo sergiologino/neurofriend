@@ -63,7 +63,7 @@ async def send_text_message(
     )
 
     transcript_ctx = await build_recent_transcript_text(session, nf.id)
-    memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=body.text)
+    memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=body.text, session=session)
     biography = await get_biography_profile(session, nf.id)
     reply_text = await generate_reply(
         nf=nf,

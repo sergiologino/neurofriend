@@ -259,3 +259,40 @@ def test_voice_flow_tracks_participants(client: TestClient) -> None:
     assert hallucination.status_code == 200
     assert hallucination.json()["reply_text"] == ""
     assert hallucination.json()["meta"]["stt_hallucination"] is True
+
+
+def test_debug_patch_participant_display_and_consent(client: TestClient) -> None:
+    created = client.post(
+        "/v1/neurofriends",
+        json={
+            "name": "Ира",
+            "archetype": "warm_companion",
+            "identity_lock_confirmed": True,
+        },
+    )
+    assert created.status_code == 200
+    nf_id = created.json()["id"]
+
+    msg = client.post(f"/v1/conversations/{nf_id}/messages", json={"text": "привет"})
+    assert msg.status_code == 200
+
+    rows = client.get(f"/v1/neurofriends/{nf_id}/debug/participants")
+    assert rows.status_code == 200
+    data = rows.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    pid = data[0]["id"]
+
+    patched = client.patch(
+        f"/v1/neurofriends/{nf_id}/debug/participants/{pid}",
+        json={"display_name": "Основной", "consent_status": "explicit_allow"},
+    )
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["display_name"] == "Основной"
+    assert body["consent_status"] == "explicit_allow"
+
+    listed = client.get(f"/v1/neurofriends/{nf_id}/debug/participants").json()
+    match = next(x for x in listed if x["id"] == pid)
+    assert match["display_name"] == "Основной"
+    assert match["consent_status"] == "explicit_allow"

@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
+from app.core.datetimeutil import utc_naive_now
 from app.models.neurofriend import NeuroFriendProfile
+from app.models.participant import ConversationParticipant
 from app.models.user import User
 from app.services.speaker_identity_service import (
+    _find_by_voiceprint,
     build_audio_fingerprint,
     extract_self_introduction_name,
     is_likely_assistant_echo,
@@ -111,6 +114,56 @@ async def test_assistant_self_voice_profile_is_not_counted_as_human() -> None:
             )
             assert first_human.participant.person_ref == "user_main"
             assert first_human.addressing_required is False
+    finally:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_find_by_voiceprint_declined_skips_feature_blend() -> None:
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    feats = [0.12, 0.04, 0.18, 0.02, 0.11, 0.35, 0.55]
+    try:
+        async with session_factory() as session:
+            user = User(display_name="main")
+            session.add(user)
+            await session.flush()
+            nf = NeuroFriendProfile(user_id=user.id, name="Друг", archetype="companion", identity_locked=True)
+            session.add(nf)
+            await session.flush()
+            now = utc_naive_now()
+            p = ConversationParticipant(
+                neurofriend_id=nf.id,
+                person_ref="user_main",
+                participant_kind="primary_user",
+                voiceprint_json={"algorithm": "wav_acoustic_mvp", "features": list(feats)},
+                voiceprint_confidence=0.8,
+                consent_status="declined",
+                first_seen_at=now,
+                last_seen_at=now,
+                turns_seen=1,
+            )
+            session.add(p)
+            await session.flush()
+
+            fingerprint = {
+                "algorithm": "wav_acoustic_mvp",
+                "features": list(feats),
+                "hash": "other_hash_not_equal",
+                "prefix": "other_hash_not",
+            }
+            matched = await _find_by_voiceprint(session, nf.id, fingerprint)
+            assert matched is not None
+            assert matched.voiceprint_json is not None
+            assert matched.voiceprint_json["features"] == feats
     finally:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)

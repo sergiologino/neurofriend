@@ -240,9 +240,16 @@ class RelationshipSnapshot {
     required this.attachment,
     required this.warmth,
     this.lastInteractionAt,
+    this.bondType = 'platonic',
+    this.affectionScore = 0.35,
+    this.romanticTensionScore = 0.12,
+    this.emotionalIntimacyScore = 0.18,
+    this.conflictMemoryScore = 0.0,
+    this.boundarySafetyScore = 0.7,
   });
 
   factory RelationshipSnapshot.fromJson(Map<String, dynamic> json) {
+    double? n(dynamic v) => v is num ? v.toDouble() : null;
     return RelationshipSnapshot(
       personRef: json['person_ref'] as String,
       displayName: json['display_name'] as String?,
@@ -252,6 +259,12 @@ class RelationshipSnapshot {
       lastInteractionAt: json['last_interaction_at'] != null
           ? DateTime.tryParse(json['last_interaction_at'] as String)
           : null,
+      bondType: json['bond_type'] as String? ?? 'platonic',
+      affectionScore: n(json['affection_score']) ?? 0.35,
+      romanticTensionScore: n(json['romantic_tension_score']) ?? 0.12,
+      emotionalIntimacyScore: n(json['emotional_intimacy_score']) ?? 0.18,
+      conflictMemoryScore: n(json['conflict_memory_score']) ?? 0.0,
+      boundarySafetyScore: n(json['boundary_safety_score']) ?? 0.7,
     );
   }
 
@@ -261,6 +274,61 @@ class RelationshipSnapshot {
   final double attachment;
   final double warmth;
   final DateTime? lastInteractionAt;
+  final String bondType;
+  final double affectionScore;
+  final double romanticTensionScore;
+  final double emotionalIntimacyScore;
+  final double conflictMemoryScore;
+  final double boundarySafetyScore;
+}
+
+/// Участник голосового диалога (`GET/PATCH .../debug/participants`).
+class ParticipantDebugItem {
+  ParticipantDebugItem({
+    required this.id,
+    required this.personRef,
+    this.displayName,
+    required this.participantKind,
+    required this.voiceprintConfidence,
+    required this.consentStatus,
+    required this.firstSeenAt,
+    required this.lastSeenAt,
+    required this.turnsSeen,
+    this.voiceprintAlgorithm,
+  });
+
+  factory ParticipantDebugItem.fromJson(Map<String, dynamic> json) {
+    final vp = json['voiceprint_json'];
+    String? algo;
+    if (vp is Map) {
+      algo = vp['algorithm'] as String?;
+    }
+    return ParticipantDebugItem(
+      id: json['id'] as String,
+      personRef: json['person_ref'] as String,
+      displayName: json['display_name'] as String?,
+      participantKind: json['participant_kind'] as String,
+      voiceprintConfidence: (json['voiceprint_confidence'] as num).toDouble(),
+      consentStatus: json['consent_status'] as String,
+      firstSeenAt: DateTime.tryParse(json['first_seen_at'] as String? ?? '') ?? DateTime.now(),
+      lastSeenAt: DateTime.tryParse(json['last_seen_at'] as String? ?? '') ?? DateTime.now(),
+      turnsSeen: (json['turns_seen'] as num).toInt(),
+      voiceprintAlgorithm: algo,
+    );
+  }
+
+  final String id;
+  final String personRef;
+  final String? displayName;
+  final String participantKind;
+  final double voiceprintConfidence;
+  final String consentStatus;
+  final DateTime firstSeenAt;
+  final DateTime lastSeenAt;
+  final int turnsSeen;
+  final String? voiceprintAlgorithm;
+
+  bool get isAssistantSelf => personRef == 'assistant_self' || participantKind == 'assistant_self';
 }
 
 /// HTTP-клиент к NeuroFriend API (пути с префиксом `/v1`).
@@ -387,6 +455,34 @@ class NeuroFriendApi {
       '/v1/neurofriends/$neurofriendId/debug/relationships/primary',
     );
     return RelationshipSnapshot.fromJson(response.data!);
+  }
+
+  Future<List<ParticipantDebugItem>> getDebugParticipants(String neurofriendId) async {
+    final response = await _dio.get<dynamic>(
+      '/v1/neurofriends/$neurofriendId/debug/participants',
+    );
+    final data = response.data;
+    if (data is! List) return <ParticipantDebugItem>[];
+    return data
+        .whereType<Map>()
+        .map((e) => ParticipantDebugItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<ParticipantDebugItem> patchDebugParticipant(
+    String neurofriendId,
+    String participantId, {
+    String? displayName,
+    String? consentStatus,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (displayName != null) payload['display_name'] = displayName;
+    if (consentStatus != null) payload['consent_status'] = consentStatus;
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/v1/neurofriends/$neurofriendId/debug/participants/$participantId',
+      data: payload,
+    );
+    return ParticipantDebugItem.fromJson(response.data!);
   }
 
   Future<List<PersonalityPreset>> getPersonalityPresets() async {

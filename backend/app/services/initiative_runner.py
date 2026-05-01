@@ -72,6 +72,7 @@ async def try_send_initiative(session: AsyncSession, neurofriend_id: uuid.UUID) 
     memory_snippets = await retrieve_snippets(
         neurofriend_id=neurofriend_id,
         query_text="настроение переживания что нового как дела",
+        session=session,
     )
 
     text = await generate_initiative_ping(

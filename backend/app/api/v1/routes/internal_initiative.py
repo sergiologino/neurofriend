@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.services.initiative_runner import run_initiative_sweep
-from app.services.memory_consolidation import run_consolidation_for_neurofriend
+from app.services.memory_consolidation import run_consolidation_all_neurofriends, run_consolidation_for_neurofriend
 
 router = APIRouter()
 
@@ -40,5 +40,21 @@ async def post_memory_consolidate(
     if not x_initiative_sweep_key or x_initiative_sweep_key != settings.initiative_sweep_secret:
         raise HTTPException(status_code=404, detail="Not found")
     result = await run_consolidation_for_neurofriend(session, uuid.UUID(neurofriend_id))
+    await session.commit()
+    return result
+
+
+@router.post("/memory/consolidate-all")
+async def post_memory_consolidate_all(
+    session: AsyncSession = Depends(get_session),
+    x_initiative_sweep_key: str | None = Header(None, alias="X-Initiative-Sweep-Key"),
+) -> dict:
+    """Cron/воркер: консолидация SQL-памяти для всех нейродрузей."""
+    settings = get_settings()
+    if not settings.initiative_sweep_secret:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not x_initiative_sweep_key or x_initiative_sweep_key != settings.initiative_sweep_secret:
+        raise HTTPException(status_code=404, detail="Not found")
+    result = await run_consolidation_all_neurofriends(session)
     await session.commit()
     return result

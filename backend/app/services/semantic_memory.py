@@ -9,6 +9,7 @@ from typing import Any
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.services.embedding_openai import embed_query, embed_texts
@@ -70,7 +71,34 @@ async def init_semantic_collection() -> None:
         logger.warning("Semantic memory: init failed (continuing without vectors): %s", e)
 
 
-async def retrieve_snippets(*, neurofriend_id: uuid.UUID, query_text: str) -> list[str]:
+async def retrieve_snippets(
+    *,
+    neurofriend_id: uuid.UUID,
+    query_text: str,
+    session: AsyncSession | None = None,
+) -> list[str]:
+    """
+    Семантика (Qdrant) + при наличии сессии — фрагменты из SQL memory_items.
+    """
+    settings = get_settings()
+    vector_part = await _retrieve_qdrant_snippets(neurofriend_id=neurofriend_id, query_text=query_text)
+    sql_part: list[str] = []
+    if session is not None and settings.sql_memory_retrieval_enabled:
+        from app.services.sql_memory_retrieval import merge_vector_and_sql_snippets, retrieve_sql_memory_snippets
+
+        sql_part = await retrieve_sql_memory_snippets(
+            session,
+            neurofriend_id,
+            query_text,
+            limit=settings.sql_memory_top_k,
+            candidate_pool=settings.sql_memory_candidate_pool,
+        )
+        cap = min(24, settings.semantic_memory_top_k + settings.sql_memory_top_k)
+        return merge_vector_and_sql_snippets(vector_part, sql_part, max_total=cap)
+    return vector_part
+
+
+async def _retrieve_qdrant_snippets(*, neurofriend_id: uuid.UUID, query_text: str) -> list[str]:
     """Top-k по косинусной близости, только точки данного нейродруга."""
     if not semantic_memory_ready() or not query_text.strip():
         return []
@@ -104,7 +132,7 @@ async def retrieve_snippets(*, neurofriend_id: uuid.UUID, query_text: str) -> li
                 out.append(t.strip())
         return out
     except Exception as e:
-        logger.warning("retrieve_snippets failed: %s", e)
+        logger.warning("_retrieve_qdrant_snippets failed: %s", e)
         return []
 
 

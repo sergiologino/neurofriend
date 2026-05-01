@@ -14,15 +14,15 @@
 | 3 — Чат-дубликат, 500 / архив / 10 | Реализовано на backend; при доработках закрепить e2e/интеграционными тестами rollover |
 | 4 — UI инспектора | Базовый Flutter-экран: события + primary relationship |
 | 5 — Онбординг, пресеты | Первая SRS-итерация: go_router, пошаговый onboarding, preview, имя/голос, personalization, identity lock; backend принимает `selected_preset_id` и валидирует deltas |
-| 6 — Память / семантика | Частично: Qdrant + embeddings + retrieval + индексация; консолидация/decay впереди |
-| 7 — Инициатива, gap, push | Частично: status, sweep, LLM-пинг, чат, Redis; push, TZ пользователя, worker без HTTP впереди |
+| 6 — Память / семантика | Частично: Qdrant + SQL `memory_items` retrieval в LLM при наличии сессии; консолидация all/profiles + воркер-флаг; push и полировка decay — дальше |
+| 7 — Инициатива, gap, push | Частично: status, sweep, LLM-пинг, SQL+Qdrant snippets в пинге; polling Flutter; push и отдельный долгоживущий воркер без HTTP — дальше |
 | 8 — Observability, смена голоса | Не начато / точечно |
 | v4.3 — Biography, expertise, boundaries, romance, capabilities, reminders | Stage A–C первая итерация реализована; Stage D–E впереди |
 
 ## Ближайший порядок реализации
 
 1. **Полировка voice participants:** заменить MVP audio hash на реальные speaker embeddings/voiceprint, добавить явное согласие/управление участниками в UI.
-2. **Полировка памяти и инициативы:** подключить consolidation worker к реальному scheduler/deployment, добавить retrieval из SQL memory в orchestrator рядом с Qdrant, расширить push вместо polling.
+2. **Полировка памяти и инициативы:** retrieval из SQL рядом с Qdrant, consolidate-all и `--consolidate-memory-first` у воркера — сделано; дальше — scheduler под деплой (не только локальный скрипт), push вместо polling, углубление decay и лимиты объёма памяти.
 3. **Полировка SRS-onboarding:** вынести экраны из `HomePage` в feature-based структуру, добавить widget tests и пользовательский biography/expertise preview.
 4. **Полировка Stage C (романтическая динамика):** классификация романтических сигналов (LLM/модель вместо словарей), показ bond/scores в инспекторе, связка с интонацией TTS.
 5. **Full-stack smoke с медиа:** базовый HTTP smoke пройден; отдельно проверить TTS/voice с `OPENAI_API_KEY`, аудиофайлом и Qdrant retrieval в окружении с ключами.
@@ -50,16 +50,16 @@
 - STT hallucination guard: hands-free WAV с низкой голосовой активностью отбрасывается до Whisper, а типичные hallucination-фразы вроде `thank you for watching` / `subscribe to my channel` после Whisper логируются как `voice_stt_hallucination_guard` и не попадают в чат;
 - STT hallucination guard применяется ко всему voice flow до speaker/person logic, чтобы артефакты не могли стать именем/участником;
 - onboarding показывает мягкое предупреждение, если выбранная gender-style манера и имя выглядят несовместимыми по базовому списку русских имён;
-- debug endpoint `/v1/neurofriends/{id}/debug/participants`;
+- debug endpoint `GET /v1/neurofriends/{id}/debug/participants`, `PATCH .../debug/participants/{participant_id}` (имя, согласие на дообучение MVP-отпечатка; при `declined` не смешивать новые признаки в отпечаток при совпадении);
+- Flutter инспектор: список участников голоса, переименование и выбор согласия (bottom sheet);
 - service tests + HTTP voice e2e.
 
 Осталось на будущую полировку:
 - заменить `wav_acoustic_mvp` на реальные speaker embeddings / voiceprint matching + diarization;
 - добавить echo cancellation/VAD на клиенте, чтобы barge-in работал устойчивее при громком TTS;
-- добавить enrollment/consent UX для пользователя и гостей;
+- расширить consent/enrollment: отдельный пользовательский экран (не только инспектор), политики для гостей;
 - улучшить hands-free UX: VAD/тишина, локальная wake-word модель вместо отправки коротких чанков на backend;
-- показать участников в мобильном инспекторе;
-- добавить merge/rename участников и обработку ложных совпадений.
+- добавить merge участников и обработку ложных совпадений (rename через PATCH уже есть).
 
 ## v4.3 Stage A — Biography + Expertise
 

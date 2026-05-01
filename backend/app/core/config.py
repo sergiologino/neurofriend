@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_vector_size: int = 1536
     semantic_memory_top_k: int = 8
+    sql_memory_retrieval_enabled: bool = Field(
+        default=True,
+        description="Подмешивать фрагменты из PostgreSQL memory_items при вызове retrieve_snippets с сессией.",
+    )
+    sql_memory_top_k: int = 6
+    sql_memory_candidate_pool: int = 120
 
     openai_api_key: str | None = None
     cors_origins: str = "http://localhost:3000,http://localhost:8080,http://127.0.0.1:8080"
