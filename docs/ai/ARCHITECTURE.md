@@ -70,20 +70,21 @@ Application/
 
 - Накопительные метрики в `relationship_models` (`bond_type`, affection / emotional intimacy / romantic tension scores) и зеркальные поля в последнем `internal_state_snapshots`; обновление на каждом входящем тексте/транскрипте в `affect_lite.snapshot_after_user_text` при включённом `romantic_dynamics_enabled`.
 - Логика медленной прогрессии и границ: `app/services/attachment_dynamics_service.py`; контекст для LLM — `romantic_prompt_context` в `generate_reply` и `generate_initiative_ping`.
+- Полировка: опционально **`ROMANTIC_SIGNAL_CLASSIFIER_LLM_ENABLED`** — `romantic_signal_llm_hint()` объединяется с эвристикой (`max`); **`STAGE_C_TTS_PROSODY_ENABLED`** — модуляция `speed` синтеза по `bond_type` (`tts_prosody.py`, `speech_openai.synthesize_speech_mp3`).
 
 ### Реализованные HTTP-поверхности (backend)
 
 - `GET /health`, `GET /v1/health`
-- `POST /v1/neurofriends`, `GET /v1/neurofriends/{id}`
+- `POST /v1/neurofriends`, `GET /v1/neurofriends/{id}`, `GET /v1/neurofriends/{id}/character-preview` — пользовательский текстовый предпросмотр биографии и экспертизы (не debug JSON)
 - `POST /v1/perception/audio` (multipart: `neurofriend_id`, `audio`)
-- `POST /v1/perception/tts` (JSON: `neurofriend_id`, `text`) — TTS для готового текста (intro, ответ из чата, повтор без повторного LLM)
+- `POST /v1/perception/tts` (JSON: `neurofriend_id`, `text`) — TTS; при `ROMANTIC_DYNAMICS_ENABLED` и **`STAGE_C_TTS_PROSODY_ENABLED`** (default true) в ответе **`meta`** может быть **`tts_speed`** в зависимости от `bond_type` primary relationship
 - `POST /v1/conversations/{neurofriend_id}/messages`, `GET .../threads/active/messages`, `GET .../threads/archived`
 - `GET /v1/neurofriends/{id}/debug/events`, `GET .../debug/relationships/primary`
 - `GET /v1/neurofriends/{id}/debug/participants`, `PATCH .../debug/participants/{participant_id}` — участники голоса (имя, согласие на дообучение MVP-отпечатка)
 - `GET /v1/neurofriends/{id}/initiative/status` — gap, тихие часы, readiness (этап 7, отладка)
 - `POST /v1/internal/initiative/sweep` — заголовок `X-Initiative-Sweep-Key` + `INITIATIVE_SWEEP_SECRET` в env; перебор профилей, генерация исходящей реплики при условиях, запись в чат и событие `initiative_message_out`
 - `POST /v1/internal/memory/consolidate`, `POST /v1/internal/memory/consolidate-all` — то же для SQL memory consolidation (один профиль / все)
-- `GET /v1/meta/personality-presets` — каталог пресетов для онбординга (канонический JSON: `backend/app/data/personality_presets.json`)
+- `GET /v1/meta/personality-presets` — каталог пресетов для онбординга (канонический JSON: `backend/app/data/personality_presets.json`); опциональные поля `biography_preview`, `expertise_preview` для пользовательского preview до создания профиля
 
 ### Семантическая память (этап 6)
 
@@ -96,7 +97,7 @@ Application/
 
 ## Пресеты личности (UI + backend)
 
-- **Сейчас:** клиент подгружает каталог через `GET /v1/meta/personality-presets`; пользователь выбирает пресет → подставляются имя и архетип, затем `POST /v1/neurofriends` с `identity_lock_confirmed`.
+- **Сейчас:** клиент подгружает каталог через `GET /v1/meta/personality-presets`; в JSON задаются `life_legend`, опционально **`biography_preview` / `expertise_preview`**, структура **`expertise_profile`** (`ExpertisePresetSeed`: `core_expertise`, `strong_familiarity`, `weak_or_neutral`) — при создании профиля имеет приоритет над эвристикой архетипа в `build_initial_expertise_profile`; пользователь выбирает пресет → `POST /v1/neurofriends` с `identity_lock_confirmed`. После создания пользовательский текст биографии/экспертизы доступен через **`GET /v1/neurofriends/{id}/character-preview`** (в приложении — «О персонаже»).
 - **По SRS (углубление):** галерея из внешнего `neurofriend_presets.json`, персонализация в `allowed_personalization_ranges`, приём `selected_preset_id` на backend с валидацией дельт — в бэклоге.
 
 ## Наблюдаемость

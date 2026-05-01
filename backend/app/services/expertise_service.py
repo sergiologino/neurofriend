@@ -44,10 +44,156 @@ _TOPIC_ALIASES: dict[str, set[str]] = {
     "medicine": {"болит", "диагноз", "лекарство", "врач"},
     "law": {"закон", "суд", "договор", "юрист"},
     "finance": {"инвестиции", "налоги", "кредит", "финансы"},
+    "mood_support": {"настроение", "тоска", "поддержи меня"},
+    "gentle_comfort": {"уют", "нежн", "утеш"},
+    "daily_attunement": {"день прошёл", "как ты себя"},
+    "gratitude_moments": {"благодар", "ценю"},
+    "cozy_habits": {"чай", "плед", "уютно дома"},
+    "slow_conversation": {"не спеш", "потише", "нетороплив"},
+    "clinical_diagnosis": {"диагноз", "болезнь", "симптом"},
+    "legal_counsel": {"иск", "исковое"},
+    "investment_advice": {"акции", "портфель", "влож"},
+    "tax_planning": {"налоговая декларация", "ндфл"},
+    "prioritization": {"приоритет", "важнее всего"},
+    "structured_thinking": {"структур", "по пунктам логич"},
+    "goal_clarification": {"зачем тебе", "какая цель"},
+    "negotiation_light": {"договориться", "компромисс"},
+    "time_management": {"дедлайн", "расписание"},
+    "risk_awareness": {"риск", "что может пойти не так"},
+    "process_design": {"процесс", "шаблон работы"},
+    "accountability": {"ответственность", "обещание"},
+    "feedback_framing": {"обратная связь"},
+    "regulated_professions": {"лицензия врача"},
+    "spontaneity": {"спонтан", "импульсив"},
+    "playful_repartee": {"остроум", "подколол"},
+    "casual_storytelling": {"расскажу случай", "история из жизни"},
+    "banter": {"подшучива", "шутливо"},
+    "group_dynamics": {"в компании", "с друзьями"},
+    "pop_culture_light": {"фильм", "сериал"},
+    "weekend_plans": {"выходные", "суббот"},
+    "social_energy": {"тусовк", "шумная компания"},
+    "reflective_questions": {"что для тебя важно", "уточни"},
+    "patience_presence": {"не торопись", "есть время"},
+    "validation_language": {"нормально чувствовать", "ты имеешь право"},
+    "mindful_pause": {"пауза", "помолчим"},
+    "repair_openings": {"давай помиримся", "прости если"},
+    "gentle_boundaries": {"мне некомфортно", "граница"},
+    "silence_comfort": {"просто помолчим", "тишина"},
+    "emotion_labeling": {"это злость", "назови эмоцию"},
+    "crisis_intervention_pro": {"суицид", "скорая психиатр"},
 }
 
 
+_TOPIC_LABELS_RU: dict[str, str] = {
+    "planning": "планирование и расстановка приоритетов",
+    "decision_making": "разбор решений и вариантов",
+    "clear_explanation": "ясные объяснения и структура",
+    "active_listening": "внимательное слушание",
+    "emotional_presence": "эмоциональное присутствие и поддержка",
+    "conflict_deescalation": "снятие напряжения в конфликтах",
+    "relationship_attention": "внимание к отношениям и близости",
+    "daily_routines": "быт и распорядок дня",
+    "medicine": "медицина и здоровье",
+    "law": "право и юридические темы",
+    "finance": "финансы и инвестиции",
+    "financial_advice": "финансовые советы",
+    "social_observation": "наблюдение за людьми и социумом",
+    "humor": "юмор и лёгкий тон",
+    "informal_communication": "неформальное общение",
+    "city_life": "городская жизнь и среда",
+    "creative_brainstorming": "творческое мышление и идеи",
+    "conversation": "разговор и беседа",
+    "personal_context": "личный контекст и рефлексия",
+    "everyday_reflection": "повседневные размышления",
+    "music": "музыка",
+    "home_comfort": "уют дома и быт",
+    "gentle_planning": "бережное планирование",
+    "relationships": "отношения",
+    "stress_contexts": "стрессовые ситуации",
+    "personal_reflection": "личная рефлексия",
+    "communication": "коммуникация",
+    "everyday_strategy": "повседневная стратегия",
+    "productivity": "продуктивность",
+    "prioritization": "приоритеты и фокус",
+    "structured_thinking": "структурированное мышление",
+    "goal_clarification": "уточнение целей",
+    "negotiation_light": "лёгкие переговоры и компромисс",
+    "time_management": "управление временем",
+    "risk_awareness": "осознание рисков",
+    "process_design": "выстраивание процессов",
+    "accountability": "ответственность и обязательства",
+    "feedback_framing": "формулировка обратной связи",
+    "regulated_professions": "регулируемые профессии",
+    "mood_support": "поддержка настроения",
+    "gentle_comfort": "мягкое утешение",
+    "daily_attunement": "настройка на ритм дня",
+    "gratitude_moments": "благодарность и тёплые моменты",
+    "cozy_habits": "уютные бытовые привычки",
+    "slow_conversation": "неторопливый разговор",
+    "clinical_diagnosis": "клиническая диагностика",
+    "legal_counsel": "юридическое консультирование",
+    "investment_advice": "инвестиционные советы",
+    "tax_planning": "налоговое планирование",
+    "spontaneity": "спонтанность",
+    "playful_repartee": "игривая словесная перепалка",
+    "casual_storytelling": "несерьёзные истории из жизни",
+    "banter": "дружеская подшучивание",
+    "group_dynamics": "динамика в группе",
+    "pop_culture_light": "лёгкая поп-культура",
+    "weekend_plans": "планы на выходные",
+    "social_energy": "социальная энергия и компании",
+    "reflective_questions": "рефлексивные вопросы",
+    "patience_presence": "терпеливое присутствие",
+    "validation_language": "валидирующие формулировки",
+    "mindful_pause": "осознанная пауза",
+    "repair_openings": "открытие для примирения",
+    "gentle_boundaries": "мягкие границы",
+    "silence_comfort": "комфорт в тишине",
+    "emotion_labeling": "называние эмоций",
+    "crisis_intervention_pro": "профессиональное кризисное вмешательство",
+}
+
+
+def _topic_label_ru(slug: str) -> str:
+    key = slug.strip().lower()
+    return _TOPIC_LABELS_RU.get(key, slug.replace("_", " "))
+
+
+def expertise_preview_for_user(profile: Mapping[str, Any] | None) -> str:
+    """Краткий текст для UI по профилю экспертизы."""
+    if not profile:
+        return ""
+    core = _profile_list(profile, "core_expertise")
+    strong = _profile_list(profile, "strong_familiarity")
+    weak = _profile_list(profile, "weak_or_neutral")
+    lines: list[str] = []
+    if core:
+        labels = [_topic_label_ru(x) for x in core[:5]]
+        lines.append("Сильные темы (ядро): " + ", ".join(labels) + ".")
+    if strong:
+        labels = [_topic_label_ru(x) for x in strong[:6]]
+        lines.append("Хорошо знакомо: " + ", ".join(labels) + ".")
+    if weak:
+        labels = [_topic_label_ru(x) for x in weak[:5]]
+        lines.append("Будет осторожен и без профессионального тона: " + ", ".join(labels) + ".")
+    disclaimer = (
+        "Это не сертификация: в узких областях персонаж будет напоминать о границах компетенции."
+    )
+    if lines:
+        lines.append(disclaimer)
+    return "\n".join(lines)
+
+
 def build_initial_expertise_profile(preset: PersonalityPresetRead | None, archetype: str) -> ExpertiseProfile:
+    if preset and preset.expertise_profile:
+        ep = preset.expertise_profile
+        return {
+            "version": ep.version,
+            "core_expertise": list(ep.core_expertise),
+            "strong_familiarity": list(ep.strong_familiarity),
+            "weak_or_neutral": list(ep.weak_or_neutral),
+            "preset_expertise_seed": preset.id,
+        }
     key = (preset.archetype if preset else archetype).strip().lower()
     base = _ARCHETYPE_PROFILES.get(
         key,

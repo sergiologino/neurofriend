@@ -223,36 +223,107 @@ class _InspectorPageState extends ConsumerState<InspectorPage> {
   }
 
   Widget _relationshipCard(RelationshipSnapshot r) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Отношения (${r.personRef})',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text('Отношения (${r.personRef})', style: Theme.of(context).textTheme.titleMedium),
             if (r.displayName != null) Text('Имя: ${r.displayName}'),
+            const SizedBox(height: 12),
+            Text('Базовые метрики', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 6),
             Text(
-              'trust: ${r.trust.toStringAsFixed(2)}  '
-              'attachment: ${r.attachment.toStringAsFixed(2)}  '
-              'warmth: ${r.warmth.toStringAsFixed(2)}',
-            ),
-            Text(
-              'bond: ${r.bondType} · affection: ${r.affectionScore.toStringAsFixed(2)} · '
-              'intimacy: ${r.emotionalIntimacyScore.toStringAsFixed(2)} · '
-              'romantic tension: ${r.romanticTensionScore.toStringAsFixed(2)}',
+              'Доверие ${r.trust.toStringAsFixed(2)} · привязанность ${r.attachment.toStringAsFixed(2)} · тепло ${r.warmth.toStringAsFixed(2)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            const Divider(height: 22),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.volunteer_activism_outlined, size: 20, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Межличностная связь (Stage C)',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(_bondTypeRu(r.bondType), style: Theme.of(context).textTheme.bodyMedium),
+                      Text('bond_type: ${r.bondType}', style: Theme.of(context).textTheme.labelSmall),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _scoreBar(context, 'Привязанность (affection)', r.affectionScore),
+            const SizedBox(height: 10),
+            _scoreBar(context, 'Эмоциональная близость', r.emotionalIntimacyScore),
+            const SizedBox(height: 10),
+            _scoreBar(context, 'Романтическое напряжение', r.romanticTensionScore),
+            const Divider(height: 22),
+            Text('Конфликт и границы', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 6),
             Text(
-              'conflict_mem: ${r.conflictMemoryScore.toStringAsFixed(2)} · '
-              'boundary_safety: ${r.boundarySafetyScore.toStringAsFixed(2)}',
+              'Память конфликта ${r.conflictMemoryScore.toStringAsFixed(2)} · '
+              'безопасность границ ${r.boundarySafetyScore.toStringAsFixed(2)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (r.lastInteractionAt != null)
-              Text('Последнее взаимодействие: ${r.lastInteractionAt}'),
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'Последнее взаимодействие: ${r.lastInteractionAt}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
           ],
         ),
       ),
+    );
+  }
+
+  String _bondTypeRu(String code) {
+    switch (code) {
+      case 'platonic':
+        return 'Нейтрально-дружеская дистанция';
+      case 'warm_acquaintance':
+        return 'Тёплое знакомство';
+      case 'warm_friendship':
+        return 'Тёплая дружба';
+      case 'emotional_close':
+        return 'Эмоционально близкая связь';
+      case 'romantic_soft':
+        return 'Осторожная романтическая окраска';
+      default:
+        return code;
+    }
+  }
+
+  Widget _scoreBar(BuildContext context, String label, double value) {
+    final v = value.clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
+            Text(v.toStringAsFixed(2), style: Theme.of(context).textTheme.labelMedium),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(value: v, minHeight: 6),
+        ),
+      ],
     );
   }
 

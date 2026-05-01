@@ -64,6 +64,13 @@ class NeuroFriendRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CharacterPreviewRead(BaseModel):
+    """Пользовательский предпросмотр биографии и экспертизы (не отладочный JSON)."""
+
+    biography_text: str = ""
+    expertise_text: str = ""
+
+
 class MessageCreate(BaseModel):
     text: str = Field(..., min_length=1, max_length=32000)
     client_timestamp: str | None = None

@@ -13,6 +13,7 @@ from app.models.neurofriend import NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
 from app.services import attachment_dynamics_service
 from app.services.boundary_response_service import apply_boundary_to_state, update_relationship_boundary
+from app.services.romantic_signal_classifier import romantic_signal_llm_hint
 
 
 async def get_latest_state(session: AsyncSession, neurofriend_id: uuid.UUID) -> InternalStateSnapshot | None:
@@ -64,6 +65,9 @@ async def snapshot_after_user_text(
     nf_row = await session.get(NeuroFriendProfile, neurofriend_id)
     archetype = nf_row.archetype if nf_row else "companion"
     if settings.romantic_dynamics_enabled and rel:
+        romantic_hint: float | None = None
+        if settings.romantic_signal_classifier_llm_enabled:
+            romantic_hint = await romantic_signal_llm_hint(user_text)
         romantic_fields = attachment_dynamics_service.update_affection_after_event(
             previous_state=prev,
             rel=rel,
@@ -73,6 +77,7 @@ async def snapshot_after_user_text(
             friction=float(boundary["friction"]),
             boundary_alert=float(boundary["boundary_alert"]),
             valence=float(boundary["valence"]),
+            romantic_signal_hint=romantic_hint,
         )
         await session.flush()
 

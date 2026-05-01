@@ -23,8 +23,8 @@
 
 1. **Полировка voice participants:** заменить MVP audio hash на реальные speaker embeddings/voiceprint, добавить явное согласие/управление участниками в UI.
 2. **Полировка памяти и инициативы:** retrieval из SQL рядом с Qdrant, consolidate-all и `--consolidate-memory-first` у воркера — сделано; дальше — scheduler под деплой (не только локальный скрипт), push вместо polling, углубление decay и лимиты объёма памяти.
-3. **Полировка SRS-onboarding:** вынести экраны из `HomePage` в feature-based структуру, добавить widget tests и пользовательский biography/expertise preview.
-4. **Полировка Stage C (романтическая динамика):** классификация романтических сигналов (LLM/модель вместо словарей), показ bond/scores в инспекторе, связка с интонацией TTS.
+3. **Полировка SRS-onboarding:** экраны в `mobile/lib/features/onboarding/`, preview биографии/экспертизы и **`expertise_profile`** из каталога — сделано; дальше — расширение widget coverage.
+4. **Полировка Stage C (романтическая динамика):** LLM-классификатор сигнала (флаг **`ROMANTIC_SIGNAL_CLASSIFIER_LLM_ENABLED`**, default off), модуляция TTS **`tts_speed`** по `bond_type`, улучшенный инспектор — сделано; дальше — углубление промптов классификатора и отдельная просодическая разметка текста (если понадобится сверх `speed`).
 5. **Full-stack smoke с медиа:** базовый HTTP smoke пройден; отдельно проверить TTS/voice с `OPENAI_API_KEY`, аудиофайлом и Qdrant retrieval в окружении с ключами.
 6. **Observability:** request id, timing middleware, метрики OpenAI/Qdrant/DB и стоимость LLM/STT/TTS.
 
@@ -74,12 +74,15 @@
 - создание нейродруга создаёт biography/expertise из preset/archetype;
 - LLM orchestrator получает biography + expertise context;
 - debug API чтения biography/expertise;
-- unit/e2e tests.
+- unit/e2e tests;
+- пользовательский preview: поля каталога `biography_preview` / `expertise_preview`, `GET /v1/neurofriends/{id}/character-preview`, экран preview онбординга и «О персонаже» в чате Flutter.
 
 Осталось на будущую полировку:
-- расширить canonical presets под полноценные `expertise_profile` и biography seed вместо эвристик;
-- вывести biography preview в обычный пользовательский UI, а не только debug;
+- расширить canonical presets (биография seed помимо `life_legend`, дополнительные нишевые темы и алиасы);
 - добавить более точную topic classification для expertise.
+
+Сделано дополнительно:
+- полноценный **`expertise_profile`** в `personality_presets.json` и приоритет при `build_initial_expertise_profile`.
 
 ## v4.3 Stage B — Conflict & Boundaries
 
@@ -115,9 +118,13 @@
 - `tests/test_attachment_dynamics.py`.
 
 Осталось на будущую полировку:
-- заменить словарные эвристики романтики на классификацию через LLM/модель;
-- отображение bond/scores в Flutter-инспекторе;
-- связь уровня связи с голосом/TTS (просодика).
+- уточнять классификатор (few-shot, безопасность, языки);
+- более тонкая просодия TTS (разметка текста, отдельный pipeline), если `speed` недостаточно.
+
+Сделано дополнительно:
+- **`romantic_signal_classifier_llm_enabled`** (по умолчанию **true**) + `romantic_signal_llm_hint`, смешивание с эвристикой в `update_affection_after_event`;
+- **`stage_c_tts_prosody_enabled`** и `tts_speed` в meta/log voice out;
+- Flutter-инспектор: русские подписи bond и шкалы метрик.
 
 ## v4.3 Stage D — Device Assistance / Capabilities
 

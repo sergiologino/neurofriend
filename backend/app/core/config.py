@@ -52,8 +52,10 @@ class Settings(BaseSettings):
     initiative_quiet_hours_start_utc: int = 22
     initiative_quiet_hours_end_utc: int = 7
     initiative_cooldown_hours: float = 12.0
-    """Если задан, `POST /v1/internal/initiative/sweep` требует заголовок `X-Initiative-Sweep-Key` с этим значением."""
-    initiative_sweep_secret: str | None = None
+    initiative_sweep_secret: str | None = Field(
+        default=None,
+        description="Если задан, `POST /v1/internal/initiative/sweep` требует заголовок `X-Initiative-Sweep-Key` с этим значением.",
+    )
 
     # Addendum v4.3 rollout flags
     biography_profile_enabled: bool = True
@@ -62,6 +64,14 @@ class Settings(BaseSettings):
     romantic_dynamics_enabled: bool = True
     speaker_recognition_enabled: bool = True
     voice_addressing_enabled: bool = True
+    romantic_signal_classifier_llm_enabled: bool = Field(
+        default=True,
+        description="Если true и задан OPENAI_API_KEY — после эвристики подмешивать LLM-оценку romantic signal в affect_lite; без ключа вызов тихо пропускается. Выключить: ROMANTIC_SIGNAL_CLASSIFIER_LLM_ENABLED=false (экономия латентности/стоимости).",
+    )
+    stage_c_tts_prosody_enabled: bool = Field(
+        default=True,
+        description="Если true и romantic_dynamics_enabled — слегка менять speed TTS по bond_type primary relationship.",
+    )
 
 
 @lru_cache

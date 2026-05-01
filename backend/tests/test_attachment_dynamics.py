@@ -68,6 +68,35 @@ def test_insult_boundary_blocks_tension_gain() -> None:
     assert rel.romantic_tension_score <= before
 
 
+def test_romantic_signal_hint_boosts_without_lexicon() -> None:
+    prev = InternalStateSnapshot(friction=0.05, boundary_alert=0.0)
+    rel_low = RelationshipModel(emotional_intimacy_score=0.48, affection_score=0.46, romantic_tension_score=0.22)
+    rel_hi = RelationshipModel(emotional_intimacy_score=0.48, affection_score=0.46, romantic_tension_score=0.22)
+    update_affection_after_event(
+        previous_state=prev,
+        rel=rel_low,
+        user_text="окей понял",
+        archetype="companion",
+        boundary_mode="normal",
+        friction=0.05,
+        boundary_alert=0.0,
+        valence=0.1,
+        romantic_signal_hint=None,
+    )
+    update_affection_after_event(
+        previous_state=prev,
+        rel=rel_hi,
+        user_text="окей понял",
+        archetype="companion",
+        boundary_mode="normal",
+        friction=0.05,
+        boundary_alert=0.0,
+        valence=0.1,
+        romantic_signal_hint=0.88,
+    )
+    assert rel_hi.romantic_tension_score > rel_low.romantic_tension_score
+
+
 def test_archetype_increases_tension_when_gate_passes() -> None:
     base_rel = RelationshipModel(emotional_intimacy_score=0.48, affection_score=0.46, romantic_tension_score=0.22)
     prev = InternalStateSnapshot(friction=0.05, boundary_alert=0.0)

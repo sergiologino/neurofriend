@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../features/onboarding/onboarding.dart';
 import '../providers.dart';
 import '../services/neurofriend_api.dart';
 import '../utils/api_error.dart';
@@ -246,6 +247,62 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _openCharacterPreview(String neurofriendId) async {
+    final api = ref.read(neuroFriendApiProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+            left: 16,
+            right: 16,
+            top: 8,
+          ),
+          child: FutureBuilder<CharacterPreview>(
+            future: api.getCharacterPreview(neurofriendId),
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const SizedBox(
+                  height: 220,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snap.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text('Не удалось загрузить: ${snap.error}'),
+                );
+              }
+              final p = snap.data!;
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Биография и память', style: Theme.of(ctx).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      p.biographyText.trim().isEmpty ? 'Пока нет данных.' : p.biographyText,
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Экспертиза', style: Theme.of(ctx).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      p.expertiseText.trim().isEmpty ? 'Пока нет данных.' : p.expertiseText,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   Map<String, dynamic> _buildPersonalizationPayload() {
@@ -612,7 +669,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _OnboardingProgress(step: _onboardingStep),
+          OnboardingProgress(step: _onboardingStep),
           const SizedBox(height: 16),
           _buildOnboardingStep(selected),
           const SizedBox(height: 16),
@@ -626,17 +683,17 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildOnboardingStep(PersonalityPreset? selected) {
     switch (_onboardingStep) {
       case 0:
-        return _WelcomeStep(onStart: () => setState(() => _onboardingStep = 1));
+        return WelcomeStep(onStart: () => setState(() => _onboardingStep = 1));
       case 1:
-        return _PresetGalleryStep(
+        return PresetGalleryStep(
           presets: _presets ?? <PersonalityPreset>[],
           selectedPresetId: _selectedPresetId,
           onSelect: _applyPreset,
         );
       case 2:
-        return _PresetPreviewStep(preset: selected);
+        return PresetPreviewStep(preset: selected);
       case 3:
-        return _NameAndVoiceStep(
+        return NameAndVoiceStep(
           nameController: _nameController,
           archetypeController: _archetypeController,
           ttsVoices: _ttsVoices,
@@ -650,7 +707,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           onPreviewVoice: _previewVoiceSample,
         );
       case 4:
-        return _PersonalizationStep(
+        return PersonalizationStep(
           softnessDelta: _softnessDelta,
           directnessDelta: _directnessDelta,
           initiativeDelta: _initiativeDelta,
@@ -667,13 +724,13 @@ class _HomePageState extends ConsumerState<HomePage> {
           onClosenessChanged: (v) => setState(() => _closenessPreference = v),
         );
       case 5:
-        return _IdentityLockStep(
+        return IdentityLockStep(
           selected: selected,
           confirmed: _identityLockConfirmed,
           onChanged: (v) => setState(() => _identityLockConfirmed = v),
         );
       default:
-        return _BirthStep(selected: selected, busy: _busy);
+        return BirthStep(selected: selected, busy: _busy);
     }
   }
 
@@ -728,6 +785,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                   style: Theme.of(context).textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              TextButton(
+                onPressed: _busy ? null : () => _openCharacterPreview(_neurofriendId!),
+                child: const Text('О персонаже'),
               ),
               TextButton(onPressed: _busy ? null : _clearNeurofriend, child: const Text('Сбросить')),
             ],
@@ -920,485 +981,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                 onPressed: _busy ? null : _sendText,
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OnboardingProgress extends StatelessWidget {
-  const _OnboardingProgress({required this.step});
-
-  final int step;
-
-  @override
-  Widget build(BuildContext context) {
-    final labels = ['Идея', 'Личность', 'Preview', 'Имя', 'Настройка', 'Ядро', 'Рождение'];
-    final safeStep = step.clamp(0, labels.length - 1);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Создание нейродруга', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(value: (safeStep + 1) / labels.length),
-        const SizedBox(height: 8),
-        Text(labels[safeStep], style: Theme.of(context).textTheme.labelLarge),
-      ],
-    );
-  }
-}
-
-class _WelcomeStep extends StatelessWidget {
-  const _WelcomeStep({required this.onStart});
-
-  final VoidCallback onStart;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepCard(
-      title: 'Создай нейродруга, который будет рядом',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Ты выбираешь не набор параметров и не чат-бота. У нейродруга будет свой характер, память, голос и постепенно появляющаяся история рядом с тобой.',
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: onStart, child: const Text('Выбрать личность')),
-        ],
-      ),
-    );
-  }
-}
-
-class _PresetGalleryStep extends StatelessWidget {
-  const _PresetGalleryStep({
-    required this.presets,
-    required this.selectedPresetId,
-    required this.onSelect,
-  });
-
-  final List<PersonalityPreset> presets;
-  final String? selectedPresetId;
-  final ValueChanged<PersonalityPreset> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepCard(
-      title: 'Выбери живой характер',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Сначала выбери образ. Настройка будет позже, в пределах его природы.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          ...presets.map(
-            (p) => Padding(
-              key: ValueKey(p.id),
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _PresetCard(
-                preset: p,
-                selected: p.id == selectedPresetId,
-                onTap: () => onSelect(p),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PresetPreviewStep extends StatelessWidget {
-  const _PresetPreviewStep({required this.preset});
-
-  final PersonalityPreset? preset;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = preset;
-    if (p == null) {
-      return const _StepCard(title: 'Preview', child: Text('Выбери пресет на предыдущем шаге.'));
-    }
-    return _StepCard(
-      title: p.title,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (p.genderLabelRu != null) Text(p.genderLabelRu!, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 8),
-          Text(p.description),
-          if (p.lifeLegend != null && p.lifeLegend!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text('Опорная биография', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(p.lifeLegend!),
-          ],
-          const SizedBox(height: 12),
-          Text('Как будет начинать общение', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          const Text('Первое сообщение будет сгенерировано из выбранного характера, а не из общего шаблона.'),
-        ],
-      ),
-    );
-  }
-}
-
-class _NameAndVoiceStep extends StatelessWidget {
-  const _NameAndVoiceStep({
-    required this.nameController,
-    required this.archetypeController,
-    required this.ttsVoices,
-    required this.selectedTtsVoiceId,
-    required this.ttsVoicesLoading,
-    required this.ttsVoicesError,
-    required this.voicePreviewBusy,
-    required this.genderStyle,
-    required this.onNameChanged,
-    required this.onVoiceChanged,
-    required this.onPreviewVoice,
-  });
-
-  final TextEditingController nameController;
-  final TextEditingController archetypeController;
-  final List<TtsVoiceOption> ttsVoices;
-  final String? selectedTtsVoiceId;
-  final bool ttsVoicesLoading;
-  final String? ttsVoicesError;
-  final bool voicePreviewBusy;
-  final String? genderStyle;
-  final ValueChanged<String> onNameChanged;
-  final ValueChanged<String?> onVoiceChanged;
-  final VoidCallback onPreviewVoice;
-
-  @override
-  Widget build(BuildContext context) {
-    final nameWarning = _nameGenderWarning(nameController.text, genderStyle);
-    return _StepCard(
-      title: 'Дай имя и выбери голос',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: nameController,
-            decoration: const InputDecoration(labelText: 'Имя'),
-            onChanged: onNameChanged,
-          ),
-          if (nameWarning != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              nameWarning,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-          const SizedBox(height: 8),
-          TextField(
-            controller: archetypeController,
-            decoration: const InputDecoration(
-              labelText: 'Архетип',
-              helperText: 'Код роли фиксируется в ядре личности.',
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (ttsVoicesLoading && ttsVoices.isEmpty) const LinearProgressIndicator(),
-          if (ttsVoicesError != null)
-            Text('Голоса: $ttsVoicesError', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          if (ttsVoices.isNotEmpty) ...[
-            DropdownButtonFormField<String>(
-              initialValue: selectedTtsVoiceId,
-              decoration: const InputDecoration(labelText: 'Голос', border: OutlineInputBorder()),
-              items: ttsVoices
-                  .map((v) => DropdownMenuItem<String>(value: v.id, child: Text(v.label)))
-                  .toList(),
-              onChanged: onVoiceChanged,
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: selectedTtsVoiceId == null ? null : onPreviewVoice,
-              icon: voicePreviewBusy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.play_arrow_outlined),
-              label: Text(voicePreviewBusy ? 'Генерация...' : 'Прослушать голос'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String? _nameGenderWarning(String rawName, String? genderStyle) {
-    final style = genderStyle?.trim().toLowerCase();
-    if (style != 'feminine' && style != 'masculine') return null;
-    final name = rawName.trim().toLowerCase();
-    if (name.isEmpty) return null;
-    const masculineNames = {'вася', 'василий', 'денис', 'олег', 'антон', 'иван', 'сергей', 'алексей', 'дмитрий'};
-    const feminineNames = {'аня', 'анна', 'марина', 'алиса', 'елена', 'ольга', 'катя', 'екатерина', 'ирина'};
-    if (style == 'feminine' && masculineNames.contains(name)) {
-      return 'Похоже на мужское имя для женской манеры. Можно оставить, но проверь, так ли задумано.';
-    }
-    if (style == 'masculine' && feminineNames.contains(name)) {
-      return 'Похоже на женское имя для мужской манеры. Можно оставить, но проверь, так ли задумано.';
-    }
-    return null;
-  }
-}
-
-class _PersonalizationStep extends StatelessWidget {
-  const _PersonalizationStep({
-    required this.softnessDelta,
-    required this.directnessDelta,
-    required this.initiativeDelta,
-    required this.emotionalityDelta,
-    required this.humorDelta,
-    required this.replyLengthPreference,
-    required this.closenessPreference,
-    required this.onSoftnessChanged,
-    required this.onDirectnessChanged,
-    required this.onInitiativeChanged,
-    required this.onEmotionalityChanged,
-    required this.onHumorChanged,
-    required this.onReplyLengthChanged,
-    required this.onClosenessChanged,
-  });
-
-  final double softnessDelta;
-  final double directnessDelta;
-  final double initiativeDelta;
-  final double emotionalityDelta;
-  final double humorDelta;
-  final String replyLengthPreference;
-  final String closenessPreference;
-  final ValueChanged<double> onSoftnessChanged;
-  final ValueChanged<double> onDirectnessChanged;
-  final ValueChanged<double> onInitiativeChanged;
-  final ValueChanged<double> onEmotionalityChanged;
-  final ValueChanged<double> onHumorChanged;
-  final ValueChanged<String> onReplyLengthChanged;
-  final ValueChanged<String> onClosenessChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepCard(
-      title: 'Сделать своим',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Это не пересоздаёт личность, а слегка сдвигает выбранный характер.', style: Theme.of(context).textTheme.bodySmall),
-          _DeltaSlider(label: 'Мягче ↔ твёрже', value: softnessDelta, onChanged: onSoftnessChanged),
-          _DeltaSlider(label: 'Деликатнее ↔ прямее', value: directnessDelta, onChanged: onDirectnessChanged),
-          _DeltaSlider(label: 'Тише ↔ инициативнее', value: initiativeDelta, onChanged: onInitiativeChanged),
-          _DeltaSlider(label: 'Спокойнее ↔ эмоциональнее', value: emotionalityDelta, onChanged: onEmotionalityChanged),
-          _DeltaSlider(label: 'Серьёзнее ↔ ироничнее', value: humorDelta, onChanged: onHumorChanged),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'short', label: Text('Коротко')),
-              ButtonSegment(value: 'medium', label: Text('Средне')),
-              ButtonSegment(value: 'long', label: Text('Развёрнуто')),
-            ],
-            selected: {replyLengthPreference},
-            onSelectionChanged: (v) => onReplyLengthChanged(v.first),
-          ),
-          const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'calm_distance', label: Text('Дистанция')),
-              ButtonSegment(value: 'warm_equal', label: Text('Тепло')),
-            ],
-            selected: {closenessPreference},
-            onSelectionChanged: (v) => onClosenessChanged(v.first),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IdentityLockStep extends StatelessWidget {
-  const _IdentityLockStep({
-    required this.selected,
-    required this.confirmed,
-    required this.onChanged,
-  });
-
-  final PersonalityPreset? selected;
-  final bool confirmed;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepCard(
-      title: 'Зафиксировать ядро',
-      child: CheckboxListTile(
-        value: confirmed,
-        onChanged: (v) => onChanged(v ?? false),
-        title: Text('Я понимаю, что ${selected?.title ?? 'выбранный характер'} останется собой'),
-        subtitle: const Text(
-          'Он сможет учиться, помнить и меняться в нюансах, но архетип и базовая природа не будут переписываться.',
-        ),
-      ),
-    );
-  }
-}
-
-class _BirthStep extends StatelessWidget {
-  const _BirthStep({required this.selected, required this.busy});
-
-  final PersonalityPreset? selected;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepCard(
-      title: 'Первый разговор',
-      child: Row(
-        children: [
-          if (busy) const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
-          if (busy) const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              busy
-                  ? 'Нейродруг собирает первое представление о себе и готовится начать разговор.'
-                  : 'Готово. Сейчас ${selected?.suggestedName ?? 'нейродруг'} появится в чате и напишет первым.',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepCard extends StatelessWidget {
-  const _StepCard({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          key: ValueKey(title),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DeltaSlider extends StatelessWidget {
-  const _DeltaSlider({required this.label, required this.value, required this.onChanged});
-
-  final String label;
-  final double value;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        Text(label, style: Theme.of(context).textTheme.labelLarge),
-        Slider(
-          min: -0.15,
-          max: 0.15,
-          divisions: 6,
-          value: value,
-          label: value.toStringAsFixed(2),
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-}
-
-String _legendExcerpt(String text, {int maxChars = 160}) {
-  final t = text.trim();
-  if (t.isEmpty) return '';
-  if (t.length <= maxChars) return t;
-  return '${t.substring(0, maxChars).trimRight()}…';
-}
-
-class _PresetCard extends StatelessWidget {
-  const _PresetCard({
-    required this.preset,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final PersonalityPreset preset;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final gender = preset.genderLabelRu;
-    final legend = preset.lifeLegend;
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${preset.title}${gender == null ? '' : ', $gender'}',
-      child: ExcludeSemantics(
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: Ink(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? scheme.primary : scheme.outlineVariant,
-                  width: selected ? 2 : 1,
-                ),
-                color: selected
-                    ? scheme.primaryContainer.withValues(alpha: 0.35)
-                    : scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      preset.title,
-                      style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    if (gender != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        gender,
-                        style: textTheme.labelMedium?.copyWith(
-                          color: scheme.secondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    if (legend != null && legend.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _legendExcerpt(legend),
-                        style: textTheme.bodySmall?.copyWith(height: 1.35),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
       ),

@@ -8,6 +8,7 @@ from app.api.deps import get_session
 from app.core.config import get_settings
 from app.models.conversation import ConversationThread, Message
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
+from app.models.relationship_state import RelationshipModel
 from app.schemas.perception import TtsRequest, TtsResponse, VoiceTurnResponse
 from app.services import affect_lite, chat_thread_service, event_service, speech_openai
 from app.services.biography_service import biography_snapshot_text, get_biography_profile
@@ -26,6 +27,7 @@ from app.services.speaker_identity_service import (
     resolve_voice_speaker,
     should_respond_to_voice_turn,
 )
+from app.services.tts_prosody import tts_speed_for_bond_type
 from app.services.tts_voice_catalog import normalize_voice_choice
 
 router = APIRouter()
@@ -33,6 +35,21 @@ router = APIRouter()
 
 def _resolved_tts_voice(nf: NeuroFriendProfile) -> str:
     return normalize_voice_choice(nf.tts_voice, nf.gender_style)
+
+
+async def _resolve_tts_speed(session: AsyncSession, neurofriend_id: uuid.UUID) -> float | None:
+    settings = get_settings()
+    if not settings.romantic_dynamics_enabled or not settings.stage_c_tts_prosody_enabled:
+        return None
+    r = await session.execute(
+        select(RelationshipModel).where(
+            RelationshipModel.neurofriend_id == neurofriend_id,
+            RelationshipModel.person_ref == "user_main",
+        )
+    )
+    rel = r.scalar_one_or_none()
+    bond = rel.bond_type if rel else "platonic"
+    return tts_speed_for_bond_type(bond)
 
 
 async def _recent_assistant_texts(session: AsyncSession, neurofriend_id: uuid.UUID, *, limit: int = 8) -> list[str]:
@@ -108,15 +125,19 @@ async def perception_tts(
         raise HTTPException(status_code=400, detail="Empty text")
 
     voice = _resolved_tts_voice(nf)
+    spd = await _resolve_tts_speed(session, body.neurofriend_id)
     try:
-        mp3 = await speech_openai.synthesize_speech_mp3(text=text, voice=voice)
+        mp3 = await speech_openai.synthesize_speech_mp3(text=text, voice=voice, speed=spd)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
     settings = get_settings()
+    meta = {"tts_model": settings.tts_model, "tts_voice": voice}
+    if spd is not None:
+        meta["tts_speed"] = spd
     return TtsResponse(
         audio_base64=speech_openai.bytes_to_base64_mp3(mp3),
-        meta={"tts_model": settings.tts_model, "tts_voice": voice},
+        meta=meta,
     )
 
 
@@ -332,8 +353,9 @@ async def perception_audio(
     )
 
     voice = _resolved_tts_voice(nf)
+    spd = await _resolve_tts_speed(session, nf.id)
     try:
-        mp3 = await speech_openai.synthesize_speech_mp3(text=reply_text, voice=voice)
+        mp3 = await speech_openai.synthesize_speech_mp3(text=reply_text, voice=voice, speed=spd)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
@@ -346,6 +368,7 @@ async def perception_audio(
             "text": reply_text,
             "tts_model": settings.tts_model,
             "tts_voice": voice,
+            **({"tts_speed": spd} if spd is not None else {}),
         },
     )
 

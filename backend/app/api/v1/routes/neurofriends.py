@@ -6,9 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session
 from app.models.conversation import Message
 from app.models.neurofriend import NeuroFriendProfile
-from app.schemas.neurofriends import NeuroFriendCreateRequest, NeuroFriendCreateResponse, NeuroFriendPatchRequest
+from app.schemas.neurofriends import (
+    CharacterPreviewRead,
+    NeuroFriendCreateRequest,
+    NeuroFriendCreateResponse,
+    NeuroFriendPatchRequest,
+)
 from app.services import chat_thread_service, event_service, neurofriend_service
+from app.services.biography_service import biography_preview_for_user, get_biography_profile
+from app.services.expertise_service import expertise_preview_for_user
 from app.services.semantic_memory import index_intro_only
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
@@ -66,8 +76,6 @@ async def get_neurofriend(
     neurofriend_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    from sqlalchemy import select
-
     r = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))
     nf = r.scalar_one_or_none()
     if not nf:
@@ -83,14 +91,34 @@ async def get_neurofriend(
     }
 
 
+@router.get("/{neurofriend_id}/character-preview", response_model=CharacterPreviewRead)
+async def get_character_preview(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> CharacterPreviewRead:
+    r = await session.execute(
+        select(NeuroFriendProfile)
+        .where(NeuroFriendProfile.id == neurofriend_id)
+        .options(selectinload(NeuroFriendProfile.identity_core))
+    )
+    nf = r.scalar_one_or_none()
+    if not nf:
+        raise HTTPException(status_code=404, detail="NeuroFriend not found")
+
+    bio = await get_biography_profile(session, neurofriend_id)
+    bio_text = biography_preview_for_user(bio)
+    core = nf.identity_core
+    exp_profile = core.expertise_profile_json if core else {}
+    exp_text = expertise_preview_for_user(exp_profile or {})
+    return CharacterPreviewRead(biography_text=bio_text, expertise_text=exp_text)
+
+
 @router.patch("/{neurofriend_id}", response_model=dict)
 async def patch_neurofriend(
     neurofriend_id: uuid.UUID,
     body: NeuroFriendPatchRequest,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    from sqlalchemy import select
-
     from app.services.tts_voice_catalog import is_valid_voice_for_gender
 
     r = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))

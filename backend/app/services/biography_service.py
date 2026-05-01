@@ -118,6 +118,51 @@ def get_biography_snapshot(profile: BiographyProfile | None) -> dict[str, Any]:
     }
 
 
+_PLACEHOLDER_HINTS = ("не детализирован", "not specified", "not_defined")
+
+
+def biography_preview_for_user(profile: BiographyProfile | None) -> str:
+    """Краткий человекочитаемый текст для UI (не промпт для LLM)."""
+    if not profile:
+        return ""
+    parts: list[str] = []
+    birth = profile.birth_context_json or {}
+    summary = str(birth.get("summary") or "").strip()
+    if summary and not any(h in summary.lower() for h in ("общим архетипом",)):
+        parts.append(f"Происхождение и контекст: {summary}")
+
+    events = profile.important_events_json or []
+    anchors: list[str] = []
+    if isinstance(events, list):
+        for item in events:
+            if isinstance(item, dict):
+                t = str(item.get("text") or "").strip()
+                if t:
+                    anchors.append(t)
+    if anchors:
+        parts.append("Опорные штрихи биографии: " + "; ".join(anchors[:4]))
+
+    family = profile.family_background_json or {}
+    notes = str(family.get("notes") or "").strip()
+    if notes and not any(h in notes.lower() for h in _PLACEHOLDER_HINTS):
+        parts.append(f"Фон: {notes}")
+
+    work = profile.work_path_json or {}
+    wnotes = str(work.get("notes") or "").strip()
+    if wnotes and not any(h in wnotes.lower() for h in _PLACEHOLDER_HINTS):
+        parts.append(f"Дело и опыт: {wnotes}")
+
+    stage = (profile.current_life_stage or "").strip()
+    stage_ru = {
+        "forming_first_relationship_with_user": "Сейчас формируется первое знакомство с тобой.",
+        "new_companion": "Начало совместного пути.",
+    }.get(stage)
+    if stage_ru:
+        parts.append(stage_ru)
+
+    return "\n\n".join(parts)
+
+
 def biography_snapshot_text(profile: BiographyProfile | None) -> str:
     snap = get_biography_snapshot(profile)
     if not snap:

@@ -27,6 +27,33 @@ class NeuroFriendCreateResult {
   final String firstIntroMessage;
 }
 
+/// Seed экспертизы из каталога пресетов (`expertise_profile` в JSON).
+class ExpertisePresetSeed {
+  ExpertisePresetSeed({
+    required this.coreExpertise,
+    required this.strongFamiliarity,
+    required this.weakOrNeutral,
+  });
+
+  factory ExpertisePresetSeed.fromJson(Map<String, dynamic> json) {
+    List<String> sl(String key) {
+      final raw = json[key];
+      if (raw is! List) return <String>[];
+      return raw.map((e) => e.toString()).toList();
+    }
+
+    return ExpertisePresetSeed(
+      coreExpertise: sl('core_expertise'),
+      strongFamiliarity: sl('strong_familiarity'),
+      weakOrNeutral: sl('weak_or_neutral'),
+    );
+  }
+
+  final List<String> coreExpertise;
+  final List<String> strongFamiliarity;
+  final List<String> weakOrNeutral;
+}
+
 /// Пресет личности из каталога (`GET /v1/meta/personality-presets`).
 class PersonalityPreset {
   PersonalityPreset({
@@ -37,9 +64,13 @@ class PersonalityPreset {
     required this.suggestedName,
     this.genderStyle,
     this.lifeLegend,
+    this.biographyPreview,
+    this.expertisePreview,
+    this.expertiseProfile,
   });
 
   factory PersonalityPreset.fromJson(Map<String, dynamic> json) {
+    final epRaw = json['expertise_profile'];
     return PersonalityPreset(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -48,6 +79,11 @@ class PersonalityPreset {
       suggestedName: json['suggested_name'] as String,
       genderStyle: json['gender_style'] as String?,
       lifeLegend: json['life_legend'] as String?,
+      biographyPreview: json['biography_preview'] as String?,
+      expertisePreview: json['expertise_preview'] as String?,
+      expertiseProfile: epRaw is Map<String, dynamic>
+          ? ExpertisePresetSeed.fromJson(Map<String, dynamic>.from(epRaw))
+          : null,
     );
   }
 
@@ -60,6 +96,12 @@ class PersonalityPreset {
   final String? genderStyle;
   /// Короткая опорная «биография» для роли.
   final String? lifeLegend;
+  /// Как биография пресета попадает в память (SRS onboarding preview).
+  final String? biographyPreview;
+  /// Какие темы сильные / где осторожность (SRS onboarding preview).
+  final String? expertisePreview;
+  /// Полный список тем экспертизы из каталога (seed в IdentityCore при создании).
+  final ExpertisePresetSeed? expertiseProfile;
 
   /// Подпись пола/манеры для UI (русский).
   String? get genderLabelRu {
@@ -93,6 +135,21 @@ class TtsVoiceOption {
   final String id;
   final String label;
   final String gender;
+}
+
+/// Пользовательский предпросмотр биографии и экспертизы (`GET .../character-preview`).
+class CharacterPreview {
+  CharacterPreview({required this.biographyText, required this.expertiseText});
+
+  factory CharacterPreview.fromJson(Map<String, dynamic> json) {
+    return CharacterPreview(
+      biographyText: json['biography_text'] as String? ?? '',
+      expertiseText: json['expertise_text'] as String? ?? '',
+    );
+  }
+
+  final String biographyText;
+  final String expertiseText;
 }
 
 class ChatMessage {
@@ -493,6 +550,13 @@ class NeuroFriendApi {
         .whereType<Map>()
         .map((e) => PersonalityPreset.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  Future<CharacterPreview> getCharacterPreview(String neurofriendId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/v1/neurofriends/$neurofriendId/character-preview',
+    );
+    return CharacterPreview.fromJson(response.data!);
   }
 
   /// Список голосов TTS для [genderStyle] пресета (`masculine` / `feminine` / `neutral` или null).

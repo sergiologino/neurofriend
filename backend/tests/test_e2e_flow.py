@@ -128,6 +128,13 @@ def test_create_neurofriend_then_text_message_and_history(client: TestClient) ->
     assert expertise.status_code == 200
     assert expertise.json()["profile"]["core_expertise"]
 
+    preview = client.get(f"/v1/neurofriends/{nf['id']}/character-preview")
+    assert preview.status_code == 200
+    pv = preview.json()
+    assert "biography_text" in pv and "expertise_text" in pv
+    assert len(pv["biography_text"]) > 12
+    assert "Сильные темы" in pv["expertise_text"]
+
 
 def test_personalization_outside_preset_range_is_rejected(client: TestClient) -> None:
     response = client.post(

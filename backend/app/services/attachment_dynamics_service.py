@@ -122,6 +122,7 @@ def update_affection_after_event(
     friction: float,
     boundary_alert: float,
     valence: float,
+    romantic_signal_hint: float | None = None,
 ) -> dict[str, float]:
     """
     Обновляет накопительные scores в RelationshipModel и возвращает поля для нового InternalStateSnapshot.
@@ -135,6 +136,9 @@ def update_affection_after_event(
     )
     warm = evaluate_warmth_signal(user_text)
     romantic_sig = evaluate_romantic_signal(user_text)
+    if romantic_signal_hint is not None:
+        hint = max(0.0, min(1.0, float(romantic_signal_hint)))
+        romantic_sig = max(romantic_sig, hint)
 
     a = float(rel.affection_score or 0.35)
     i = float(rel.emotional_intimacy_score or 0.18)
