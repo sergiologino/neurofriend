@@ -36,6 +36,11 @@ class NeuroFriendCreateRequest(BaseModel):
     social_style: str | None = None
     speech_style: str | None = None
     relationship_style: str | None = None
+    romantic_style_id: str | None = Field(
+        None,
+        max_length=48,
+        description="Необязательно: id стиля из romantic_style_catalog.json (должен подходить архетипу).",
+    )
     identity_lock_confirmed: bool = False
     user_display_name: str | None = Field(None, max_length=200)
     user_timezone: str | None = Field(None, max_length=64)

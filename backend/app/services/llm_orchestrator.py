@@ -12,6 +12,7 @@ from app.services.attachment_dynamics_service import romantic_prompt_context
 from app.services.boundary_response_service import boundary_prompt_context
 from app.services.expertise_service import expertise_snapshot_text, get_expertise_level
 from app.services.openai_client import get_openai_client
+from app.services.romantic_style_service import extend_llm_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +97,14 @@ async def generate_intro_message(
 ) -> str:
     client = get_openai_client()
     settings = get_settings()
-    system = _identity_system_prompt(
+    base = _identity_system_prompt(
         nf,
         core,
         biography_snapshot=biography_snapshot,
         expertise_profile=expertise_profile,
-    ) + (
+    )
+    base = extend_llm_system_prompt(base, core, rel=None, state=None)
+    system = base + (
         "\nСгенерируй первое сообщение в чат: как живой человек — коротко о себе, можно мимолётную деталь "
         "«из жизни» в рамках легенды. По возможности закончить не вопросом, а фразой с точкой. Без Markdown."
     )
@@ -147,6 +150,7 @@ async def generate_reply(
         biography_snapshot=biography_snapshot,
         expertise_profile=expertise_profile,
     )
+    system = extend_llm_system_prompt(system, core, rel, state)
     expertise_level = get_expertise_level(user_text, expertise_profile)
     system += (
         f"\nТекущая тема классифицирована по экспертности как: {expertise_level}. "
@@ -219,6 +223,7 @@ async def generate_initiative_ping(
     client = get_openai_client()
     settings = get_settings()
     system = _identity_system_prompt(nf, core)
+    system = extend_llm_system_prompt(system, core, rel, state)
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог (опирайся на смысл; сейчас ты пишешь первым после паузы):\n"
@@ -306,6 +311,7 @@ async def generate_repair_ping(
     client = get_openai_client()
     settings = get_settings()
     system = _identity_system_prompt(nf, core)
+    system = extend_llm_system_prompt(system, core, rel, state)
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог (есть напряжённый контекст; пиши первым после паузы):\n"
@@ -373,6 +379,7 @@ async def generate_event_followup_ping(
     client = get_openai_client()
     settings = get_settings()
     system = _identity_system_prompt(nf, core)
+    system = extend_llm_system_prompt(system, core, rel, state)
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог:\n"

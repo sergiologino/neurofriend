@@ -12,6 +12,7 @@ from app.services import affect_lite, chat_thread_service, event_service
 from app.services.biography_service import biography_snapshot_text, get_biography_profile
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
+from app.services.romantic_style_service import ensure_core_has_romantic_style
 from app.services.repair_state import repair_followup_context_for_llm
 from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
 from app.services.speaker_identity_service import resolve_text_speaker
@@ -35,6 +36,8 @@ async def send_text_message(
 
     rcore = await session.execute(select(IdentityCore).where(IdentityCore.neurofriend_id == neurofriend_id))
     core = rcore.scalar_one_or_none()
+    if core:
+        await ensure_core_has_romantic_style(session, core, nf.archetype)
 
     speaker = await resolve_text_speaker(session, neurofriend_id=nf.id)
     await affect_lite.touch_relationship(session, neurofriend_id=nf.id, user_display=None)

@@ -47,6 +47,10 @@ class IdentityCore(Base):
     values_json: Mapped[dict] = mapped_column(jsonb_type, default=dict)
     expertise_profile_json: Mapped[dict] = mapped_column(jsonb_type, default=dict)
     immutable_version: Mapped[int] = mapped_column(Integer, default=1)
+    romantic_style_id: Mapped[str | None] = mapped_column(String(48), nullable=True, index=True)
+    romantic_style_profile_json: Mapped[dict | None] = mapped_column(jsonb_type, nullable=True)
+    romantic_variation_seed: Mapped[int] = mapped_column(Integer, default=0)
+    romantic_style_locked: Mapped[bool] = mapped_column(Boolean, default=True)
 
     neurofriend: Mapped[NeuroFriendProfile] = relationship(
         back_populates="identity_core",

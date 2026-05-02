@@ -20,6 +20,21 @@
 
 ---
 
+### Кратко: только десктоп Windows 11 (backend + окно Flutter)
+
+Полная детализация — в частях 1–3 ниже. Минимальная последовательность:
+
+1. **PostgreSQL** с пустой БД; в `Application\backend\.env` — `DATABASE_URL` (см. `.env.example`). При необходимости `OPENAI_API_KEY`.
+2. **Backend** (из `Application\backend`, виртуальное окружение активировано):  
+   `pip install -e ".[dev]"` (один раз) → `alembic upgrade head` →  
+   `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`.
+3. **Клиент** (из `Application\mobile`, путь к проекту **без символа `!`**, см. выше):  
+   `flutter pub get` →  
+   `flutter run -d windows --dart-define=API_BASE_URL=http://127.0.0.1:8000`.  
+   Если сборка ругается на MSVC — установите Visual Studio 2022 с рабочей нагрузкой «Разработка классических приложений на C++» (`flutter doctor`).
+
+---
+
 ## Часть 1. База данных PostgreSQL (один раз)
 
 1. Убедитесь, что **PostgreSQL** запущен (служба Windows или pgAdmin показывает сервер «online»).

@@ -9,11 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.datetimeutil import utc_naive_now
-from app.models.neurofriend import NeuroFriendProfile
+from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
 from app.services import attachment_dynamics_service
 from app.services.boundary_response_service import apply_boundary_to_state, update_relationship_boundary
 from app.services.romantic_signal_classifier import romantic_signal_llm_hint
+from app.services.romantic_style_service import compute_style_snapshot_fields, ensure_core_has_romantic_style
 from app.services.repair_state import (
     compute_conflict_peak,
     compute_cooldown_active,
@@ -92,6 +93,11 @@ async def snapshot_after_user_text(
     settings = get_settings()
     nf_row = await session.get(NeuroFriendProfile, neurofriend_id)
     archetype = nf_row.archetype if nf_row else "companion"
+    core = await session.get(IdentityCore, neurofriend_id)
+    if core:
+        await ensure_core_has_romantic_style(session, core, archetype)
+    romantic_profile = core.romantic_style_profile_json if core else None
+
     if settings.romantic_dynamics_enabled and rel:
         romantic_hint: float | None = None
         if settings.romantic_signal_classifier_llm_enabled:
@@ -106,8 +112,19 @@ async def snapshot_after_user_text(
             boundary_alert=float(boundary["boundary_alert"]),
             valence=float(boundary["valence"]),
             romantic_signal_hint=romantic_hint,
+            romantic_profile=romantic_profile if isinstance(romantic_profile, dict) else None,
         )
         await session.flush()
+
+    style_snap = compute_style_snapshot_fields(
+        previous=prev,
+        rel=rel,
+        romantic_profile=romantic_profile if isinstance(romantic_profile, dict) else None,
+        user_text=user_text,
+        loneliness=lonely,
+        hurt=float(boundary["hurt"]),
+        boundary_alert=float(boundary["boundary_alert"]),
+    )
 
     snap = InternalStateSnapshot(
         neurofriend_id=neurofriend_id,
@@ -131,6 +148,10 @@ async def snapshot_after_user_text(
         cooldown_active=cooldown_active,
         repair_readiness=repair_readiness,
         reconnection_need=reconnection_need,
+        jealousy_activation=style_snap["jealousy_activation"],
+        vulnerability_pressure=style_snap["vulnerability_pressure"],
+        distance_pain=style_snap["distance_pain"],
+        desire_for_reassurance=style_snap["desire_for_reassurance"],
     )
     session.add(snap)
     await session.flush()

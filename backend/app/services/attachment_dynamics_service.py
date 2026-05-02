@@ -123,6 +123,7 @@ def update_affection_after_event(
     boundary_alert: float,
     valence: float,
     romantic_signal_hint: float | None = None,
+    romantic_profile: dict | None = None,
 ) -> dict[str, float]:
     """
     Обновляет накопительные scores в RelationshipModel и возвращает поля для нового InternalStateSnapshot.
@@ -177,6 +178,16 @@ def update_affection_after_event(
     rel.romantic_tension_score = tense
 
     update_bond_type(rel, romance_blocked=romance_blocked)
+
+    from app.services.romantic_style_service import apply_post_turn_relationship_styling
+
+    apply_post_turn_relationship_styling(
+        rel,
+        romantic_profile=romantic_profile,
+        romantic_sig=romantic_sig,
+        romance_blocked=romance_blocked,
+        boundary_mode=boundary_mode,
+    )
 
     ephemeral = min(0.08, romantic_sig * 0.06) if not romance_blocked else 0.0
     snap_romantic_interest = min(1.0, tense + ephemeral)

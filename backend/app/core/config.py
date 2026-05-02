@@ -72,6 +72,10 @@ class Settings(BaseSettings):
         default=True,
         description="Если true и romantic_dynamics_enabled — слегка менять speed TTS по bond_type primary relationship.",
     )
+    romantic_style_profiles_enabled: bool = Field(
+        default=True,
+        description="v4.5 — каталог романтических стилей, поля снимка/связи, блок в system prompt LLM.",
+    )
 
     # Addendum v4.4 — repair initiative + tracked events
     repair_initiative_enabled: bool = Field(default=True, description="Исходящая попытка восстановления после конфликта.")

@@ -15,6 +15,7 @@ from app.services.biography_service import biography_snapshot_text, create_initi
 from app.services.expertise_service import build_initial_expertise_profile
 from app.core.config import get_settings
 from app.services.presets_catalog import get_preset_by_id
+from app.services.romantic_style_service import init_new_identity_core_romantic_fields, validate_style_for_archetype
 from app.services.tts_voice_catalog import normalize_voice_choice
 
 
@@ -137,6 +138,16 @@ async def create_neurofriend(session: AsyncSession, body: NeuroFriendCreateReque
         else {},
     )
     session.add(core)
+    await session.flush()
+
+    seed_i = int.from_bytes(nf.id.bytes[:4], "big", signed=False)
+    pref = body.romantic_style_id.strip().lower() if body.romantic_style_id else None
+    init_new_identity_core_romantic_fields(
+        core,
+        archetype=nf.archetype,
+        neurofriend_id_seed=seed_i,
+        preferred_style_id=pref if settings.romantic_style_profiles_enabled else None,
+    )
     await session.flush()
 
     biography = None

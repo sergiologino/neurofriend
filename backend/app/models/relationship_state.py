@@ -40,6 +40,10 @@ class InternalStateSnapshot(Base):
     cooldown_active: Mapped[bool] = mapped_column(default=False)
     repair_readiness: Mapped[float] = mapped_column(Float, default=0.0)
     reconnection_need: Mapped[float] = mapped_column(Float, default=0.0)
+    jealousy_activation: Mapped[float] = mapped_column(Float, default=0.0)
+    vulnerability_pressure: Mapped[float] = mapped_column(Float, default=0.0)
+    distance_pain: Mapped[float] = mapped_column(Float, default=0.0)
+    desire_for_reassurance: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class RelationshipModel(Base):
@@ -70,3 +74,8 @@ class RelationshipModel(Base):
     repair_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     last_repair_attempt_at: Mapped[datetime | None] = mapped_column(nullable=True)
     repair_success_rate: Mapped[float] = mapped_column(Float, default=0.5)
+    romantic_phase: Mapped[str] = mapped_column(String(32), default="none")
+    confession_readiness: Mapped[float] = mapped_column(Float, default=0.08)
+    flirt_history_score: Mapped[float] = mapped_column(Float, default=0.1)
+    safety_for_vulnerability: Mapped[float] = mapped_column(Float, default=0.55)
+    romantic_misalignment_score: Mapped[float] = mapped_column(Float, default=0.0)
