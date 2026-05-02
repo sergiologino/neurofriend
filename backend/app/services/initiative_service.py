@@ -24,6 +24,15 @@ USER_INBOUND_TYPES = frozenset(
 )
 
 INITIATIVE_MESSAGE_OUT = "initiative_message_out"
+REPAIR_INITIATIVE_OUT = "repair_initiative_out"
+EVENT_FOLLOWUP_INITIATIVE_OUT = "event_followup_initiative_out"
+ALL_INITIATIVE_OUT_TYPES = frozenset(
+    {
+        INITIATIVE_MESSAGE_OUT,
+        REPAIR_INITIATIVE_OUT,
+        EVENT_FOLLOWUP_INITIATIVE_OUT,
+    }
+)
 
 
 def _aware_utc_from_naive(ts: datetime) -> datetime:
@@ -75,7 +84,7 @@ async def get_last_initiative_out_at(session: AsyncSession, neurofriend_id: uuid
         select(EventLog.timestamp)
         .where(
             EventLog.neurofriend_id == neurofriend_id,
-            EventLog.event_type == INITIATIVE_MESSAGE_OUT,
+            EventLog.event_type.in_(ALL_INITIATIVE_OUT_TYPES),
         )
         .order_by(EventLog.timestamp.desc())
         .limit(1)

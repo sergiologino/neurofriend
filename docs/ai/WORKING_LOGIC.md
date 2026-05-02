@@ -170,7 +170,39 @@
 
 ---
 
-## 8. Где читать код
+## 8. Addendum v4.4 — tracked events и repair initiative
+
+Реализация по `docs/SRS/NeuroFriend_Addendum_v4_4_Repair_And_Tracked_Events (1).md` (упрощённый MVP без отдельной сущности `ConflictEpisode`).
+
+### 8.1. Отслеживаемые события
+
+- После логирования входящего **текста/голоса** вызывается **`ingest_from_user_message`**: при **`TRACKED_EVENTS_ENABLED`** и наличии API выполняется **LLM JSON** — список кандидатов с типами (`birthday`, `flight`, `deadline`, `promise`, …), признаками `needs_clarification` и пропусками полей.
+- В БД создаются строки **`tracked_events`** (часто в статусе `draft`).
+- В **`generate_reply`** в system добавляется **`tracked_events_context`**: черновики с недостающими полями и ближайшие **подтверждённые** события (если включено **`EVENT_CLARIFICATION_ENABLED`** для блока уточнений).
+- Подтверждение и время события — через API (**`PATCH .../tracked-events/{id}`** → `status=confirmed`) или создание вручную (**`POST`**); при подтверждении с датой и **`TRACKED_EVENT_REMINDERS_ENABLED`** создаются строки **`tracked_event_reminders`**.
+
+### 8.2. Инициатива: напоминание → repair → обычная
+
+Общий **`initiative_cooldown_hours`** применяется ко **всем** исходящим типам подряд.
+
+1. **Event follow-up:** если есть просроченное **`tracked_event_reminders`** (pending, `remind_at <= now`, событие `confirmed`), генерируется **`generate_event_followup_ping`**, событие лога **`event_followup_initiative_out`**, `message_kind=event_followup`.
+2. **Repair:** если у связи **`unresolved_conflict`**, прошла пауза и порог **`repair_readiness`** (см. `repair_initiative_service`), отправляется **`generate_repair_ping`**, лог **`repair_initiative_out`**, увеличивается **`repair_attempt_count`**.
+3. Иначе — прежняя **обычная инициатива** (`initiative_message_out`).
+
+**Флаги конфликта:** при грубой реплике / режимах границы `sync_relationship_conflict_flags` выставляет **`unresolved_conflict`** и **`last_conflict_at`**; слова примирения (**«прости»** и т.д.) снимают флаг и поднимают **`repair_success_rate`**.
+
+### 8.3. Поля состояния
+
+На каждом **`InternalStateSnapshot`** сохраняются **`conflict_peak`**, **`cooldown_active`**, **`repair_readiness`**, **`reconnection_need`** (для промптов и отладки). Решение об исходящей repair-инициативе на sweep дополнительно использует **`compute_repair_readiness_now`** по текущему времени.
+
+### 8.4. API отладки
+
+- **`GET /v1/neurofriends/{id}/conflicts/active`**
+- **`GET|POST|PATCH .../tracked-events`**, **`POST .../complete`**, **`POST .../reminders`**
+
+---
+
+## 9. Где читать код
 
 | Тема | Файл |
 |------|------|
@@ -185,3 +217,4 @@
 | Транскрипт в промпт | `backend/app/services/conversation_prompt.py` |
 | Экспертиза по теме | `backend/app/services/expertise_service.py` |
 | Флаги окружения | `backend/app/core/config.py`, `docs/ai/CURRENT_STATE.md` |
+| v4.4 tracked / repair | `tracked_event_service.py`, `tracked_event_detection.py`, `repair_state.py`, `repair_initiative_service.py`, `routes/v44_tracked.py` |

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String
+from sqlalchemy import Boolean, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -36,6 +36,10 @@ class InternalStateSnapshot(Base):
     romantic_interest: Mapped[float] = mapped_column(Float, default=0.12)
     flirt_comfort: Mapped[float] = mapped_column(Float, default=0.22)
     emotional_intimacy: Mapped[float] = mapped_column(Float, default=0.18)
+    conflict_peak: Mapped[float] = mapped_column(Float, default=0.0)
+    cooldown_active: Mapped[bool] = mapped_column(default=False)
+    repair_readiness: Mapped[float] = mapped_column(Float, default=0.0)
+    reconnection_need: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class RelationshipModel(Base):
@@ -61,3 +65,8 @@ class RelationshipModel(Base):
     emotional_intimacy_score: Mapped[float] = mapped_column(Float, default=0.18)
     last_interaction_at: Mapped[datetime | None] = mapped_column(nullable=True)
     active_topics_json: Mapped[list | dict] = mapped_column(jsonb_type, default=list)
+    unresolved_conflict: Mapped[bool] = mapped_column(default=False)
+    last_conflict_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    repair_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_repair_attempt_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    repair_success_rate: Mapped[float] = mapped_column(Float, default=0.5)

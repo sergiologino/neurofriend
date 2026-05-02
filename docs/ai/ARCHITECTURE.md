@@ -72,6 +72,12 @@ Application/
 - Логика медленной прогрессии и границ: `app/services/attachment_dynamics_service.py`; контекст для LLM — `romantic_prompt_context` в `generate_reply` и `generate_initiative_ping`.
 - Полировка: опционально **`ROMANTIC_SIGNAL_CLASSIFIER_LLM_ENABLED`** — `romantic_signal_llm_hint()` объединяется с эвристикой (`max`); **`STAGE_C_TTS_PROSODY_ENABLED`** — модуляция `speed` синтеза по `bond_type` (`tts_prosody.py`, `speech_openai.synthesize_speech_mp3`).
 
+### Отслеживаемые события и repair (addendum v4.4)
+
+- **`tracked_events` / `tracked_event_reminders`**: из входящих реплик LLM извлекает кандидатов (`tracked_event_detection`); черновики и контекст уточнений попадают в `generate_reply` через `build_orchestrator_context`; подтверждённые события могут порождать напоминания (`schedule_reminders_for_event`).
+- **Repair после конфликта**: флаги `unresolved_conflict`, `last_conflict_at`, счётчики попыток в `relationship_models`; поля `conflict_peak`, `repair_readiness` на снимках; исходящая реплика `repair_initiative_service.try_send_repair_initiative` + промпт `generate_repair_ping` (архетипные инструкции к тону).
+- **Sweep инициативы** (`initiative_runner.try_send_initiative`): общий cooldown для всех исходящих типов; порядок — просроченное напоминание события (`event_followup_initiative_out`) → repair (`repair_initiative_out`) → обычная `initiative_message_out`.
+
 ### Реализованные HTTP-поверхности (backend)
 
 - `GET /health`, `GET /v1/health`
@@ -81,8 +87,9 @@ Application/
 - `POST /v1/conversations/{neurofriend_id}/messages`, `GET .../threads/active/messages`, `GET .../threads/archived`
 - `GET /v1/neurofriends/{id}/debug/events`, `GET .../debug/relationships/primary`
 - `GET /v1/neurofriends/{id}/debug/participants`, `PATCH .../debug/participants/{participant_id}` — участники голоса (имя, согласие на дообучение MVP-отпечатка)
+- `GET /v1/neurofriends/{id}/conflicts/active`, `GET|POST|PATCH /v1/neurofriends/{id}/tracked-events`, `POST .../tracked-events/{event_id}/complete`, `POST .../tracked-events/{event_id}/reminders` — v4.4 (отладка и ручное управление событиями)
 - `GET /v1/neurofriends/{id}/initiative/status` — gap, тихие часы, readiness (этап 7, отладка)
-- `POST /v1/internal/initiative/sweep` — заголовок `X-Initiative-Sweep-Key` + `INITIATIVE_SWEEP_SECRET` в env; перебор профилей, генерация исходящей реплики при условиях, запись в чат и событие `initiative_message_out`
+- `POST /v1/internal/initiative/sweep` — заголовок `X-Initiative-Sweep-Key` + `INITIATIVE_SWEEP_SECRET` в env; перебор профилей; возможные исходящие типы: напоминание по **`tracked_event_reminders`**, **repair initiative**, обычная инициатива (`*_initiative_out` / `initiative_message_out`)
 - `POST /v1/internal/memory/consolidate`, `POST /v1/internal/memory/consolidate-all` — то же для SQL memory consolidation (один профиль / все)
 - `GET /v1/meta/personality-presets` — каталог пресетов для онбординга (канонический JSON: `backend/app/data/personality_presets.json`); опциональные поля `biography_preview`, `expertise_preview` для пользовательского preview до создания профиля
 

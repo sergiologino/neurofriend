@@ -1,10 +1,10 @@
 # Текущее состояние
 
-**Дата актуализации:** 2026-05-01 (пресеты `expertise_profile`, Stage C: LLM romantic hint **по умолчанию вкл.**, TTS prosody, инспектор)
+**Дата актуализации:** 2026-05-02 (v4.4 tracked events + repair initiative; см. `docs/SRS/NeuroFriend_Addendum_v4_4_Repair_And_Tracked_Events (1).md`)
 
 ## Репозиторий
 
-- **Backend (FastAPI):** `backend/` — PostgreSQL, Alembic `20260412_0001` + последующие ревизии, эндпоинты `/health`, `/v1/meta/personality-presets` (в т.ч. **`expertise_profile`** seed в JSON), `/v1/neurofriends` (`selected_preset_id` / legacy `preset_id`, personalization deltas), `/v1/perception/audio`, **`/v1/perception/tts`** (озвучка; опционально **`tts_speed`** в meta при Stage C prosody), `/v1/conversations/...`, debug. Ответы LLM учитывают **недавний транскрипт** активного треда, **стиль пресета** (`character_prompt` в ядре), v4.3 Stage A biography/expertise, Stage B boundary context/anti-flattery, а в voice flow — speaker context.
+- **Backend (FastAPI):** `backend/` — PostgreSQL, Alembic до ревизии **`20260502_8`** (v4.4: `tracked_events`, `tracked_event_reminders`, поля repair/conflict в snapshot/relationship), эндпоинты `/health`, `/v1/meta/personality-presets`, `/v1/neurofriends`, **`GET/PATCH .../tracked-events`**, **`GET .../conflicts/active`**, `/v1/perception/audio`, **`/v1/perception/tts`**, `/v1/conversations/...`, debug. Ответы LLM учитывают транскрипт, пресет, biography/expertise, boundary, Stage C, **контекст отслеживаемых событий и repair после конфликта** (при включённых флагах).
 - **Инфраструктура:** `infra/docker-compose.yml` (опционально Postgres в контейнере; **для разработки достаточно локального PostgreSQL на хосте** — см. `infra/README.md`). Redis/Qdrant в compose по необходимости. Сборка Docker-образа backend ранее не проверялась (daemon мог быть недоступен).
 - **Клиент:** `mobile/` — Flutter: `go_router`; onboarding в `lib/features/onboarding/` с preview пресета (**в т.ч. чипы тем из `expertise_profile`**); в чате **«О персонаже»** (`GET .../character-preview`). Лента чата, голос/текст, hands-free «слушать имя», **инспектор с русскими подписями bond и шкалами Stage C**; плашка обработки голоса. Стек см. `mobile/README.md`.
 - Память проекта: `docs/ai/`.
@@ -16,7 +16,7 @@
 
 ## Сборка и тесты
 
-- Backend: `pip install -e ".[dev]"` в `backend/`, затем `python -m pytest tests/ -q` (последняя проверка **2026-05-01:** **57 passed**).
+- Backend: `pip install -e ".[dev]"` в `backend/`, затем **`alembic upgrade head`**, `python -m pytest tests/ -q` (последняя проверка **2026-05-02:** **62 passed**).
 - Перед запуском API: **локальный PostgreSQL** (рекомендуется), `alembic upgrade head`, `OPENAI_API_KEY`; для семантической памяти — поднять **Qdrant** (`infra/docker-compose.yml` сервис `qdrant` или локально порт 6333) и при необходимости выставить `QDRANT_URL`.
 
 ### Переменные окружения (Stage C и смежное)
@@ -28,6 +28,20 @@
 | `ROMANTIC_DYNAMICS_ENABLED` | `true` | Включает обновление affection / romantic interest / bond и контекст в оркестраторе. |
 | `ROMANTIC_SIGNAL_CLASSIFIER_LLM_ENABLED` | **`true`** | Дополнительный Chat Completions JSON `intensity` 0..1 для романтического сигнала; смешивается с эвристикой (`max`). Без `OPENAI_API_KEY` шаг пропускается. Для отключения (латентность/стоимость): `false`. |
 | `STAGE_C_TTS_PROSODY_ENABLED` | `true` | Параметр **`speed`** для OpenAI TTS по `bond_type` основного отношения; в meta ответа может быть `tts_speed`. |
+
+### Переменные окружения (v4.4 tracked events + repair)
+
+| Переменная | По умолчанию | Назначение |
+|------------|----------------|------------|
+| `TRACKED_EVENTS_ENABLED` | `true` | LLM-детект кандидатов событий из входящих реплик и сохранение `TrackedEvent`. |
+| `EVENT_CLARIFICATION_ENABLED` | `true` | Промпт-подсказки уточнять неполные события (черновики с `needs_clarification`). |
+| `TRACKED_EVENT_REMINDERS_ENABLED` | `true` | Строки `TrackedEventReminder` и исходящие **`event_followup`** в sweep инициативы. |
+| `REPAIR_INITIATIVE_ENABLED` | `true` | Исходящая **`repair_initiative`** после конфликта и паузы (тип события `repair_initiative_out`). |
+| `REPAIR_READINESS_THRESHOLD` | `0.62` | Порог готовности к repair (0..1). |
+| `REPAIR_INITIATIVE_GAP_HOURS_MIN` | `3` | Мин. пауза без сообщений пользователя перед repair. |
+| `REPAIR_ATTEMPT_GAP_HOURS` | `18` | Мин. интервал между попытками repair. |
+| `REPAIR_ATTEMPT_MAX` | `4` | Лимит попыток repair за эпизод конфликта. |
+
 - Клиент: `flutter pub get`, затем `dart analyze lib test` — без замечаний; `flutter test` — **4 passed** (**2026-05-01**). Полная сборка зависит от окружения (Flutter, Visual Studio для Windows desktop).
 
 ## Известные ограничения (UX)
@@ -54,6 +68,7 @@
 - v4.3 Stage C (романтическая/межличностная динамика): флаг `romantic_dynamics_enabled`; поля `affection`, `romantic_interest`, `flirt_comfort`, `emotional_intimacy` в снимке состояния; в отношениях — `bond_type`, `affection_score`, `romantic_tension_score`, `emotional_intimacy_score`; сервис `attachment_dynamics_service`; **`romantic_signal_classifier_llm_enabled`** (по умолчанию **вкл.**; см. таблицу env выше) + `romantic_signal_classifier.py` (LLM JSON intensity, max с эвристикой); **`stage_c_tts_prosody_enabled`** — `speed` в OpenAI TTS по `bond_type` (`tts_prosody.py`); контекст в `generate_reply` и `generate_initiative_ping`; Alembic `20260426_7`.
 - Инспектор Flutter / debug API: карточка отношений — русские подписи **`bond_type`**, шкалы affection / emotional intimacy / romantic tension, блок конфликта/границ; голосовые участники; `PATCH .../debug/participants/{participant_id}` (имя, согласие; при `declined` backend не смешивает MVP-отпечаток).
 - Память: `retrieve_snippets` при переданной DB-сессии подмешивает топ фрагментов из **SQL `memory_items`** (ранг importance×access×(1−decay) + пересечение слов с запросом) рядом с **Qdrant**; флаги `SQL_MEMORY_RETRIEVAL_ENABLED`, `SQL_MEMORY_TOP_K`, `SQL_MEMORY_CANDIDATE_POOL`. Добавлены `run_consolidation_all_neurofriends`, `POST /v1/internal/memory/consolidate-all` (тот же секрет, что sweep), флаг воркера `scripts/initiative_worker.py --consolidate-memory-first`.
+- **v4.4 repair + tracked events:** таблицы `tracked_events`, `tracked_event_reminders`; поля конфликта/repair в snapshot и `relationship_models`; детект событий LLM + уточнение в промпте; sweep инициативы: due reminder → **repair_initiative_out** → обычная инициатива; API `GET .../conflicts/active`, CRUD tracked-events; Alembic `20260502_8`. SRS: `docs/SRS/NeuroFriend_Addendum_v4_4_Repair_And_Tracked_Events (1).md`.
 
 ## Следующий логичный шаг
 

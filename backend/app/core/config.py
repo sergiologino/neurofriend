@@ -73,6 +73,20 @@ class Settings(BaseSettings):
         description="Если true и romantic_dynamics_enabled — слегка менять speed TTS по bond_type primary relationship.",
     )
 
+    # Addendum v4.4 — repair initiative + tracked events
+    repair_initiative_enabled: bool = Field(default=True, description="Исходящая попытка восстановления после конфликта.")
+    repair_readiness_threshold: float = Field(default=0.62, ge=0.0, le=1.0)
+    repair_initiative_gap_hours_min: float = Field(default=3.0, ge=0.0)
+    repair_attempt_gap_hours: float = Field(default=18.0, ge=0.0)
+    repair_attempt_max: int = Field(default=4, ge=1, le=20)
+
+    tracked_events_enabled: bool = Field(default=True, description="Детект и хранение TrackedEvent из диалога.")
+    event_clarification_enabled: bool = Field(
+        default=True,
+        description="Подсказки в промпте уточнять недостающие поля отслеживаемых событий.",
+    )
+    tracked_event_reminders_enabled: bool = Field(default=True, description="Напоминания из подтверждённых tracked events.")
+
 
 @lru_cache
 def get_settings() -> Settings:

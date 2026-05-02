@@ -15,6 +15,7 @@ from app.services.biography_service import biography_snapshot_text, get_biograph
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
 from app.services.openai_client import get_openai_client
+from app.services.repair_state import repair_followup_context_for_llm
 from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
 from app.services.speaker_identity_service import (
     audio_activity_metrics,
@@ -29,6 +30,7 @@ from app.services.speaker_identity_service import (
 )
 from app.services.tts_prosody import tts_speed_for_bond_type
 from app.services.tts_voice_catalog import normalize_voice_choice
+from app.services.tracked_event_service import build_orchestrator_context, ingest_from_user_message
 
 router = APIRouter()
 
@@ -337,9 +339,18 @@ async def perception_audio(
         raw={"filename": filename, "voiceprint": speaker_turn.participant.voiceprint_json},
     )
 
+    await ingest_from_user_message(
+        session,
+        neurofriend_id=nf.id,
+        user_text=transcript,
+        source_event_id=inbound.id,
+    )
+
     transcript_ctx = await build_recent_transcript_text(session, nf.id)
     memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=transcript, session=session)
     biography = await get_biography_profile(session, nf.id)
+    te_ctx = await build_orchestrator_context(session, nf.id)
+    repair_ctx = repair_followup_context_for_llm(rel, state)
     reply_text = await generate_reply(
         nf=nf,
         core=core,
@@ -350,6 +361,8 @@ async def perception_audio(
         conversation_transcript=transcript_ctx,
         biography_snapshot=biography_snapshot_text(biography),
         speaker_context=speaker_turn.speaker_context if settings.voice_addressing_enabled else None,
+        tracked_events_context=te_ctx if te_ctx else None,
+        repair_conflict_context=repair_ctx if repair_ctx else None,
     )
 
     voice = _resolved_tts_voice(nf)

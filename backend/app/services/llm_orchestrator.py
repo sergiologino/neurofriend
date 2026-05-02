@@ -135,6 +135,8 @@ async def generate_reply(
     conversation_transcript: str | None = None,
     biography_snapshot: str | None = None,
     speaker_context: str | None = None,
+    tracked_events_context: str | None = None,
+    repair_conflict_context: str | None = None,
 ) -> str:
     client = get_openai_client()
     settings = get_settings()
@@ -175,6 +177,10 @@ async def generate_reply(
         romantic_ctx = romantic_prompt_context(state, rel)
         if romantic_ctx:
             system += "\n" + romantic_ctx
+    if tracked_events_context and tracked_events_context.strip():
+        system += "\n\n" + tracked_events_context.strip()
+    if repair_conflict_context and repair_conflict_context.strip():
+        system += "\n\n" + repair_conflict_context.strip()
     if memory_snippets:
         system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:12])
 
@@ -265,4 +271,149 @@ async def generate_initiative_ping(
         return text if text else fallback
     except Exception as e:
         logger.warning("generate_initiative_ping: OpenAI failed, using fallback: %s", e)
+        return fallback
+
+
+def _repair_archetype_tone(archetype: str) -> str:
+    a = (archetype or "").lower()
+    if any(x in a for x in ("учитель", "наставник", "коуч", "stoic", "стоик")):
+        return (
+            "Тон варианта repair: сдержанно и по делу; без давления; можно признать, "
+            "что разговор оборвался неудачно."
+        )
+    if any(x in a for x in ("романт", "нежн", "муза")):
+        return "Тон варианта repair: мягкий и бережный; без упреков и без игры в игнор."
+    if any(x in a for x in ("peer", "друг", "ирони")):
+        return "Тон варианта repair: живой; допустима лёгкая самоирония без колкости и без давления."
+    return (
+        "Тон варианта repair: спокойный и ровный; признай паузу после напряжения, предложи вернуться без шантажа."
+    )
+
+
+async def generate_repair_ping(
+    *,
+    nf: NeuroFriendProfile,
+    core: IdentityCore | None,
+    state: InternalStateSnapshot | None,
+    rel: RelationshipModel | None,
+    gap_hours: float,
+    memory_snippets: list[str] | None = None,
+    conversation_transcript: str | None = None,
+    conflict_peak: float = 0.0,
+    readiness: float = 0.0,
+) -> str:
+    """Инициатива восстановления контакта после конфликта (v4.4)."""
+    client = get_openai_client()
+    settings = get_settings()
+    system = _identity_system_prompt(nf, core)
+    if conversation_transcript and conversation_transcript.strip():
+        system += (
+            "\n\nНедавний диалог (есть напряжённый контекст; пиши первым после паузы):\n"
+            + conversation_transcript.strip()
+        )
+    if state:
+        system += (
+            f"\nВнутреннее состояние (условно): hurt={state.hurt:.2f}, friction={state.friction:.2f}, "
+            f"repair_readiness≈{state.repair_readiness:.2f}, conflict_peak≈{conflict_peak:.2f}."
+        )
+    if rel:
+        system += (
+            f"\nОтношение: warmth={rel.warmth:.2f}, conflict_memory={rel.conflict_memory_score:.2f}, "
+            f"repair_success_rate={rel.repair_success_rate:.2f}."
+        )
+    boundary_context = boundary_prompt_context(state, rel)
+    if boundary_context:
+        system += "\n" + boundary_context
+    system += (
+        "\n\nСИТУАЦИЯ REPAIR: между вами был конфликт или резкое напряжение; прошло время тишины "
+        f"(пауза пользователя порядка {gap_hours:.1f} ч.; readiness≈{readiness:.2f}). "
+        "Ты сам выходишь на связь — коротко, без шантажа молчанием, без пассивной агрессии и без унижения. "
+        "Не обвиняй; можно мягко признать дискомфорт и предложить продолжить спокойнее.\n"
+        + _repair_archetype_tone(nf.archetype)
+    )
+    if memory_snippets:
+        system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:10])
+
+    user_prompt = (
+        "[Задача: одна реплика repair-initiative после конфликта и паузы. Пользователь ещё не писал в этой волне.]"
+    )
+    fallback = "Мне не хочется оставлять разговор на этом. Если захочешь — можно попробовать продолжить спокойнее."
+    if not client:
+        return fallback
+    try:
+        chat = await client.chat.completions.create(
+            model=settings.chat_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.86,
+            max_tokens=340,
+        )
+        text = (chat.choices[0].message.content or "").strip()
+        return text if text else fallback
+    except Exception as e:
+        logger.warning("generate_repair_ping: OpenAI failed, using fallback: %s", e)
+        return fallback
+
+
+async def generate_event_followup_ping(
+    *,
+    nf: NeuroFriendProfile,
+    core: IdentityCore | None,
+    state: InternalStateSnapshot | None,
+    rel: RelationshipModel | None,
+    event_title: str,
+    event_type: str,
+    reminder_hint: str | None,
+    memory_snippets: list[str] | None = None,
+    conversation_transcript: str | None = None,
+) -> str:
+    """Исходящее напоминание по отслеживаемому событию пользователя."""
+    client = get_openai_client()
+    settings = get_settings()
+    system = _identity_system_prompt(nf, core)
+    if conversation_transcript and conversation_transcript.strip():
+        system += (
+            "\n\nНедавний диалог:\n"
+            + conversation_transcript.strip()
+        )
+    if state:
+        system += (
+            f"\nВнутреннее состояние (условно): valence={state.valence:.2f}, attachment={state.attachment:.2f}."
+        )
+    if rel:
+        system += (
+            f"\nОтношение к пользователю: warmth={rel.warmth:.2f}, trust={rel.trust:.2f}."
+        )
+    boundary_context = boundary_prompt_context(state, rel)
+    if boundary_context:
+        system += "\n" + boundary_context
+
+    hint_line = reminder_hint or "Мягко напомни про это событие без давления."
+    system += (
+        f"\n\nСИТУАЦИЯ НАПОМИНАНИЯ: у пользователя отмечено событие типа «{event_type}»: «{event_title}». "
+        f"Ориентир для тона: {hint_line} Одна короткая реплика исходящей инициативы; без канцелярита и без списка дел."
+    )
+    if memory_snippets:
+        system += "\nРелевантные фрагменты памяти:\n- " + "\n- ".join(memory_snippets[:8])
+
+    user_prompt = "[Задача: одна реплика напоминания по событию пользователя; он ещё не писал в этой волне.]"
+    fallback = f"Напоминаю про «{event_title}», если ещё актуально — напиши, как ты."
+    if not client:
+        return fallback
+    try:
+        chat = await client.chat.completions.create(
+            model=settings.chat_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.82,
+            max_tokens=280,
+        )
+        text = (chat.choices[0].message.content or "").strip()
+        return text if text else fallback
+    except Exception as e:
+        logger.warning("generate_event_followup_ping: OpenAI failed, using fallback: %s", e)
         return fallback

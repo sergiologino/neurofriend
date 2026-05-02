@@ -5,6 +5,7 @@ from app.models.memory_item import MemoryItem
 from app.models.neurofriend import BiographyProfile, IdentityCore, NeuroFriendProfile
 from app.models.participant import ConversationParticipant
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
+from app.models.tracked_event import TrackedEvent, TrackedEventReminder
 from app.models.user import User
 
 __all__ = [
@@ -20,4 +21,6 @@ __all__ = [
     "ConversationThread",
     "Message",
     "ConversationParticipant",
+    "TrackedEvent",
+    "TrackedEventReminder",
 ]

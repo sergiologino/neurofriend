@@ -12,8 +12,10 @@ from app.services import affect_lite, chat_thread_service, event_service
 from app.services.biography_service import biography_snapshot_text, get_biography_profile
 from app.services.conversation_prompt import build_recent_transcript_text
 from app.services.llm_orchestrator import generate_reply
+from app.services.repair_state import repair_followup_context_for_llm
 from app.services.semantic_memory import index_dialogue_turn, retrieve_snippets
 from app.services.speaker_identity_service import resolve_text_speaker
+from app.services.tracked_event_service import build_orchestrator_context, ingest_from_user_message
 
 router = APIRouter()
 
@@ -62,9 +64,18 @@ async def send_text_message(
         normalized={"text": body.text, "speaker_person_ref": speaker.person_ref},
     )
 
+    await ingest_from_user_message(
+        session,
+        neurofriend_id=nf.id,
+        user_text=body.text,
+        source_event_id=inbound.id,
+    )
+
     transcript_ctx = await build_recent_transcript_text(session, nf.id)
     memory_snippets = await retrieve_snippets(neurofriend_id=nf.id, query_text=body.text, session=session)
     biography = await get_biography_profile(session, nf.id)
+    te_ctx = await build_orchestrator_context(session, nf.id)
+    repair_ctx = repair_followup_context_for_llm(rel, state)
     reply_text = await generate_reply(
         nf=nf,
         core=core,
@@ -74,6 +85,8 @@ async def send_text_message(
         memory_snippets=memory_snippets,
         conversation_transcript=transcript_ctx,
         biography_snapshot=biography_snapshot_text(biography),
+        tracked_events_context=te_ctx if te_ctx else None,
+        repair_conflict_context=repair_ctx if repair_ctx else None,
     )
 
     from app.core.config import get_settings

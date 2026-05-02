@@ -14,6 +14,12 @@ from app.models.relationship_state import InternalStateSnapshot, RelationshipMod
 from app.services import attachment_dynamics_service
 from app.services.boundary_response_service import apply_boundary_to_state, update_relationship_boundary
 from app.services.romantic_signal_classifier import romantic_signal_llm_hint
+from app.services.repair_state import (
+    compute_conflict_peak,
+    compute_cooldown_active,
+    compute_repair_readiness_values,
+    sync_relationship_conflict_flags,
+)
 
 
 async def get_latest_state(session: AsyncSession, neurofriend_id: uuid.UUID) -> InternalStateSnapshot | None:
@@ -49,6 +55,34 @@ async def snapshot_after_user_text(
         hurt = min(1.0, hurt + 0.05)
     boundary = apply_boundary_to_state(previous=prev, text=user_text, valence=v, hurt=hurt, safety=safety)
 
+    rel_stmt = select(RelationshipModel).where(
+        RelationshipModel.neurofriend_id == neurofriend_id,
+        RelationshipModel.person_ref == "user_main",
+    )
+    rel_row = await session.execute(rel_stmt)
+    rel = rel_row.scalar_one_or_none()
+
+    sync_relationship_conflict_flags(
+        rel,
+        user_text=user_text,
+        boundary_mode=str(boundary["boundary_mode"]),
+        friction=float(boundary["friction"]),
+    )
+
+    conflict_peak = compute_conflict_peak(previous=prev, boundary_alert=float(boundary["boundary_alert"]))
+    cooldown_active = compute_cooldown_active(
+        boundary_mode=str(boundary["boundary_mode"]),
+        friction=float(boundary["friction"]),
+    )
+    repair_readiness, reconnection_need = compute_repair_readiness_values(
+        rel=rel,
+        friction=float(boundary["friction"]),
+        conflict_peak=conflict_peak,
+        cooldown_active=cooldown_active,
+    )
+    if rel:
+        await session.flush()
+
     romantic_fields = {
         "affection": float(prev.affection) if prev else 0.35,
         "romantic_interest": float(prev.romantic_interest) if prev else 0.12,
@@ -56,12 +90,6 @@ async def snapshot_after_user_text(
         "emotional_intimacy": float(prev.emotional_intimacy) if prev else 0.18,
     }
     settings = get_settings()
-    rel_stmt = select(RelationshipModel).where(
-        RelationshipModel.neurofriend_id == neurofriend_id,
-        RelationshipModel.person_ref == "user_main",
-    )
-    rel_row = await session.execute(rel_stmt)
-    rel = rel_row.scalar_one_or_none()
     nf_row = await session.get(NeuroFriendProfile, neurofriend_id)
     archetype = nf_row.archetype if nf_row else "companion"
     if settings.romantic_dynamics_enabled and rel:
@@ -99,6 +127,10 @@ async def snapshot_after_user_text(
         romantic_interest=float(romantic_fields["romantic_interest"]),
         flirt_comfort=float(romantic_fields["flirt_comfort"]),
         emotional_intimacy=float(romantic_fields["emotional_intimacy"]),
+        conflict_peak=conflict_peak,
+        cooldown_active=cooldown_active,
+        repair_readiness=repair_readiness,
+        reconnection_need=reconnection_need,
     )
     session.add(snap)
     await session.flush()
