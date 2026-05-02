@@ -1,3 +1,6 @@
+import pytest
+
+from app.core.config import get_settings
 from app.services.tts_voice_catalog import (
     bucket_from_gender_style,
     default_voice_for_gender,
@@ -5,6 +8,15 @@ from app.services.tts_voice_catalog import (
     normalize_voice_choice,
     voices_for_bucket,
 )
+
+
+@pytest.fixture(autouse=True)
+def _speech_provider_defaults(monkeypatch):
+    monkeypatch.setenv("SPEECH_TTS_PROVIDER", "openai")
+    monkeypatch.setenv("SPEECH_STT_PROVIDER", "openai")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def test_default_by_gender() -> None:
@@ -38,3 +50,13 @@ def test_voices_for_bucket_counts() -> None:
 def test_bucket_from_gender_style() -> None:
     assert bucket_from_gender_style("Masculine") == "masculine"
     assert bucket_from_gender_style(None) == "neutral"
+
+
+def test_yandex_openai_voice_migration(monkeypatch) -> None:
+    monkeypatch.setenv("SPEECH_TTS_PROVIDER", "yandex")
+    get_settings.cache_clear()
+    assert normalize_voice_choice("onyx", "masculine") == "filipp"
+    assert normalize_voice_choice("alloy", "neutral") == "ermil_neu"
+    assert is_valid_voice_for_gender("filipp", "masculine") is True
+    assert is_valid_voice_for_gender("filipp", "feminine") is False
+    assert len(voices_for_bucket("neutral")) >= 1

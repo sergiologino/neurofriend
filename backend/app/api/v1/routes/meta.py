@@ -29,7 +29,7 @@ def get_tts_voices(
         description="SRS gender_style пресета: neutral / masculine / feminine — фильтр списка голосов.",
     ),
 ) -> list[TtsVoiceItem]:
-    """Голоса OpenAI TTS, сгруппированные по манере пресета (для выбора при создании нейродруга)."""
+    """Голоса TTS (OpenAI или Yandex — по SPEECH_TTS_PROVIDER), сгруппированные по манере пресета."""
     b = bucket_from_gender_style(gender_style)
     raw = voices_for_bucket(b)
     return [TtsVoiceItem(id=x["id"], label=x["label"], gender=x["gender"]) for x in raw]
@@ -38,7 +38,11 @@ def get_tts_voices(
 @router.post("/tts-preview", response_model=TtsResponse)
 async def post_tts_preview(body: TtsPreviewRequest) -> TtsResponse:
     """Прослушивание голоса до создания нейродруга (тот же синтез, что в `/perception/tts`)."""
-    if get_openai_client() is None:
+    settings = get_settings()
+    if settings.speech_tts_provider == "yandex":
+        if not (settings.yandex_speech_api_key or "").strip():
+            raise HTTPException(status_code=503, detail="YANDEX_SPEECH_API_KEY is not configured")
+    elif get_openai_client() is None:
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
     vid = body.tts_voice.strip()
     if not is_valid_voice_for_gender(vid, body.gender_style):
@@ -49,16 +53,18 @@ async def post_tts_preview(body: TtsPreviewRequest) -> TtsResponse:
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Empty text")
-    settings = get_settings()
     try:
         mp3 = await speech_openai.synthesize_speech_mp3(text=text, voice=vid)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+    meta: dict[str, object] = {
+        "tts_provider": settings.speech_tts_provider,
+        "tts_voice": vid,
+        "gender_style": body.gender_style,
+    }
+    if settings.speech_tts_provider == "openai":
+        meta["tts_model"] = settings.tts_model
     return TtsResponse(
         audio_base64=speech_openai.bytes_to_base64_mp3(mp3),
-        meta={
-            "tts_model": settings.tts_model,
-            "tts_voice": vid,
-            "gender_style": body.gender_style,
-        },
+        meta=meta,
     )

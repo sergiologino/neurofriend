@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,6 +40,20 @@ class Settings(BaseSettings):
     whisper_model: str = "whisper-1"
     tts_model: str = "tts-1"
     tts_voice: str = "alloy"
+
+    speech_tts_provider: Literal["openai", "yandex"] = Field(
+        default="openai",
+        description="Провайдер синтеза речи: OpenAI TTS или Yandex SpeechKit.",
+    )
+    speech_stt_provider: Literal["openai", "yandex"] = Field(
+        default="openai",
+        description="Провайдер распознавания: OpenAI Whisper или Yandex STT v1 (для Yandex нужен Ogg Opus, не WebM).",
+    )
+    yandex_speech_api_key: str | None = Field(default=None, description="Api-Key для SpeechKit (TTS/STT).")
+    yandex_speech_folder_id: str | None = Field(
+        default=None,
+        description="Идентификатор каталога (folderId) в Yandex Cloud для биллинга SpeechKit.",
+    )
 
     # Chat transcript policy (product requirement); override via env CHAT_MAX_MESSAGES_PER_THREAD / CHAT_CARRYOVER_MESSAGES
     chat_max_messages_per_thread: int = 500

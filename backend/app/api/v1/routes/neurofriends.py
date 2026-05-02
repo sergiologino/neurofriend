@@ -71,26 +71,6 @@ async def create_neurofriend(
     )
 
 
-@router.get("/{neurofriend_id}", response_model=dict)
-async def get_neurofriend(
-    neurofriend_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    r = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))
-    nf = r.scalar_one_or_none()
-    if not nf:
-        raise HTTPException(status_code=404, detail="NeuroFriend not found")
-    return {
-        "id": str(nf.id),
-        "user_id": str(nf.user_id),
-        "name": nf.name,
-        "archetype": nf.archetype,
-        "gender_style": nf.gender_style,
-        "tts_voice": nf.tts_voice,
-        "identity_locked": nf.identity_locked,
-    }
-
-
 @router.get("/{neurofriend_id}/character-preview", response_model=CharacterPreviewRead)
 async def get_character_preview(
     neurofriend_id: uuid.UUID,
@@ -111,6 +91,26 @@ async def get_character_preview(
     exp_profile = core.expertise_profile_json if core else {}
     exp_text = expertise_preview_for_user(exp_profile or {})
     return CharacterPreviewRead(biography_text=bio_text, expertise_text=exp_text)
+
+
+@router.get("/{neurofriend_id}", response_model=dict)
+async def get_neurofriend(
+    neurofriend_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    r = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == neurofriend_id))
+    nf = r.scalar_one_or_none()
+    if not nf:
+        raise HTTPException(status_code=404, detail="NeuroFriend not found")
+    return {
+        "id": str(nf.id),
+        "user_id": str(nf.user_id),
+        "name": nf.name,
+        "archetype": nf.archetype,
+        "gender_style": nf.gender_style,
+        "tts_voice": nf.tts_voice,
+        "identity_locked": nf.identity_locked,
+    }
 
 
 @router.patch("/{neurofriend_id}", response_model=dict)

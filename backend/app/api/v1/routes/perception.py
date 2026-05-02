@@ -37,6 +37,13 @@ from app.services.tracked_event_service import build_orchestrator_context, inges
 router = APIRouter()
 
 
+def _speech_tts_configured() -> bool:
+    s = get_settings()
+    if s.speech_tts_provider == "yandex":
+        return bool((s.yandex_speech_api_key or "").strip())
+    return get_openai_client() is not None
+
+
 def _resolved_tts_voice(nf: NeuroFriendProfile) -> str:
     return normalize_voice_choice(nf.tts_voice, nf.gender_style)
 
@@ -116,8 +123,11 @@ async def perception_tts(
     session: AsyncSession = Depends(get_session),
 ) -> TtsResponse:
     """Озвучка произвольного текста (тот же TTS, что после голосового хода)."""
-    if get_openai_client() is None:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
+    if not _speech_tts_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="TTS is not configured (OPENAI_API_KEY or Yandex SpeechKit key)",
+        )
 
     rnf = await session.execute(select(NeuroFriendProfile).where(NeuroFriendProfile.id == body.neurofriend_id))
     nf = rnf.scalar_one_or_none()
@@ -136,7 +146,12 @@ async def perception_tts(
         raise HTTPException(status_code=503, detail=str(e)) from e
 
     settings = get_settings()
-    meta = {"tts_model": settings.tts_model, "tts_voice": voice}
+    meta: dict[str, object] = {
+        "tts_provider": settings.speech_tts_provider,
+        "tts_voice": voice,
+    }
+    if settings.speech_tts_provider == "openai":
+        meta["tts_model"] = settings.tts_model
     if spd is not None:
         meta["tts_speed"] = spd
     return TtsResponse(
@@ -380,17 +395,22 @@ async def perception_audio(
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
+    norm_out: dict[str, object] = {
+        "text": reply_text,
+        "tts_voice": voice,
+        "tts_provider": settings.speech_tts_provider,
+    }
+    if spd is not None:
+        norm_out["tts_speed"] = spd
+    if settings.speech_tts_provider == "openai":
+        norm_out["tts_model"] = settings.tts_model
+
     outbound = await event_service.log_event(
         session,
         neurofriend_id=nf.id,
         event_type="voice_message_out",
         source="voice",
-        normalized={
-            "text": reply_text,
-            "tts_model": settings.tts_model,
-            "tts_voice": voice,
-            **({"tts_speed": spd} if spd is not None else {}),
-        },
+        normalized=norm_out,
     )
 
     thread, _u, _a = await chat_thread_service.append_transcript_pair(
