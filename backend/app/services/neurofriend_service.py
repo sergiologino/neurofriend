@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import ConversationThread
+from app.models.language_adaptation import SocialLearningProfile
 from app.models.neurofriend import IdentityCore, NeuroFriendProfile
 from app.models.relationship_state import InternalStateSnapshot, RelationshipModel
 from app.models.user import User
@@ -167,6 +168,7 @@ async def create_neurofriend(session: AsyncSession, body: NeuroFriendCreateReque
         )
     )
     session.add(ConversationThread(neurofriend_id=nf.id, status="active", message_count=0))
+    session.add(SocialLearningProfile(neurofriend_id=nf.id))
     await session.flush()
 
     intro = await llm_orchestrator.generate_intro_message(

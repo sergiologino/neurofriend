@@ -11,6 +11,7 @@ from app.schemas.neurofriends import MessageCreate, MessageResponse
 from app.services import affect_lite, chat_thread_service, event_service
 from app.services.biography_service import biography_snapshot_text, get_biography_profile
 from app.services.conversation_prompt import build_recent_transcript_text
+from app.services.language_adaptation_service import build_language_adaptation_context
 from app.services.llm_orchestrator import generate_reply
 from app.services.romantic_style_service import ensure_core_has_romantic_style
 from app.services.repair_state import repair_followup_context_for_llm
@@ -79,6 +80,9 @@ async def send_text_message(
     biography = await get_biography_profile(session, nf.id)
     te_ctx = await build_orchestrator_context(session, nf.id)
     repair_ctx = repair_followup_context_for_llm(rel, state)
+    lang_adapt = await build_language_adaptation_context(
+        session, neurofriend_id=nf.id, user_id=nf.user_id, rel=rel
+    )
     reply_text = await generate_reply(
         nf=nf,
         core=core,
@@ -90,6 +94,7 @@ async def send_text_message(
         biography_snapshot=biography_snapshot_text(biography),
         tracked_events_context=te_ctx if te_ctx else None,
         repair_conflict_context=repair_ctx if repair_ctx else None,
+        language_adaptation_context=lang_adapt,
     )
 
     from app.core.config import get_settings

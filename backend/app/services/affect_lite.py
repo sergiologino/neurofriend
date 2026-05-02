@@ -116,6 +116,16 @@ async def snapshot_after_user_text(
         )
         await session.flush()
 
+    if nf_row and settings.language_adaptation_enabled:
+        from app.services.language_adaptation_service import ingest_user_message
+
+        await ingest_user_message(
+            session,
+            neurofriend_id=neurofriend_id,
+            user_id=nf_row.user_id,
+            user_text=user_text,
+        )
+
     style_snap = compute_style_snapshot_fields(
         previous=prev,
         rel=rel,

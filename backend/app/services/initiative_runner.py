@@ -23,6 +23,7 @@ from app.services.initiative_service import (
     get_last_initiative_out_at,
 )
 from app.services.llm_orchestrator import generate_event_followup_ping, generate_initiative_ping
+from app.services.language_adaptation_service import build_language_adaptation_context
 from app.services.repair_initiative_service import try_send_repair_initiative
 from app.services.semantic_memory import index_intro_only, retrieve_snippets
 
@@ -70,6 +71,10 @@ async def _send_tracked_reminder_initiative(
         session=session,
     )
 
+    lang_adapt = await build_language_adaptation_context(
+        session, neurofriend_id=nf.id, user_id=nf.user_id, rel=rel
+    )
+
     text = await generate_event_followup_ping(
         nf=nf,
         core=core,
@@ -80,6 +85,7 @@ async def _send_tracked_reminder_initiative(
         reminder_hint=reminder_row.hint,
         memory_snippets=memory_snippets,
         conversation_transcript=transcript_ctx,
+        language_adaptation_context=lang_adapt,
     )
 
     outbound = await event_service.log_event(
@@ -159,6 +165,10 @@ async def _try_send_generic_initiative(session: AsyncSession, neurofriend_id: uu
         session=session,
     )
 
+    lang_adapt = await build_language_adaptation_context(
+        session, neurofriend_id=nf.id, user_id=nf.user_id, rel=rel
+    )
+
     text = await generate_initiative_ping(
         nf=nf,
         core=core,
@@ -167,6 +177,7 @@ async def _try_send_generic_initiative(session: AsyncSession, neurofriend_id: uu
         gap_hours=gap_f,
         memory_snippets=memory_snippets,
         conversation_transcript=transcript_ctx,
+        language_adaptation_context=lang_adapt,
     )
 
     outbound = await event_service.log_event(

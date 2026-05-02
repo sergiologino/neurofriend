@@ -21,6 +21,7 @@ from app.services.initiative_service import (
     get_last_user_inbound_at,
 )
 from app.services.llm_orchestrator import generate_repair_ping
+from app.services.language_adaptation_service import build_language_adaptation_context
 from app.services.repair_state import cooldown_hours_for_peak
 from app.services.semantic_memory import index_intro_only, retrieve_snippets
 
@@ -134,6 +135,9 @@ async def try_send_repair_initiative(session: AsyncSession, neurofriend_id: uuid
     )
 
     gap_f = float(gate.get("gap_hours") or 0.0)
+    lang_adapt = await build_language_adaptation_context(
+        session, neurofriend_id=nf.id, user_id=nf.user_id, rel=rel
+    )
     text = await generate_repair_ping(
         nf=nf,
         core=core,
@@ -144,6 +148,7 @@ async def try_send_repair_initiative(session: AsyncSession, neurofriend_id: uuid
         conversation_transcript=transcript_ctx,
         conflict_peak=float(gate.get("conflict_peak") or 0.0),
         readiness=float(gate.get("readiness") or 0.0),
+        language_adaptation_context=lang_adapt,
     )
 
     outbound = await event_service.log_event(

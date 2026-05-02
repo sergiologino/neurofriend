@@ -16,7 +16,10 @@ from app.models import (  # noqa: F401
     Message,
     NeuroFriendProfile,
     RelationshipModel,
+    SocialLearningProfile,
     User,
+    UserDomainProfile,
+    UserLanguageProfile,
 )
 
 config = context.config

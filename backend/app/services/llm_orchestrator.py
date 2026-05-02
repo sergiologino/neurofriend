@@ -12,6 +12,7 @@ from app.services.attachment_dynamics_service import romantic_prompt_context
 from app.services.boundary_response_service import boundary_prompt_context
 from app.services.expertise_service import expertise_snapshot_text, get_expertise_level
 from app.services.openai_client import get_openai_client
+from app.services.language_adaptation_service import extend_llm_language_adaptation_prompt
 from app.services.romantic_style_service import extend_llm_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ async def generate_intro_message(
     core: IdentityCore | None,
     biography_snapshot: str | None = None,
     expertise_profile: dict[str, Any] | None = None,
+    language_adaptation_context: str | None = None,
 ) -> str:
     client = get_openai_client()
     settings = get_settings()
@@ -104,6 +106,7 @@ async def generate_intro_message(
         expertise_profile=expertise_profile,
     )
     base = extend_llm_system_prompt(base, core, rel=None, state=None)
+    base = extend_llm_language_adaptation_prompt(base, language_adaptation_context)
     system = base + (
         "\nСгенерируй первое сообщение в чат: как живой человек — коротко о себе, можно мимолётную деталь "
         "«из жизни» в рамках легенды. По возможности закончить не вопросом, а фразой с точкой. Без Markdown."
@@ -140,6 +143,7 @@ async def generate_reply(
     speaker_context: str | None = None,
     tracked_events_context: str | None = None,
     repair_conflict_context: str | None = None,
+    language_adaptation_context: str | None = None,
 ) -> str:
     client = get_openai_client()
     settings = get_settings()
@@ -151,6 +155,7 @@ async def generate_reply(
         expertise_profile=expertise_profile,
     )
     system = extend_llm_system_prompt(system, core, rel, state)
+    system = extend_llm_language_adaptation_prompt(system, language_adaptation_context)
     expertise_level = get_expertise_level(user_text, expertise_profile)
     system += (
         f"\nТекущая тема классифицирована по экспертности как: {expertise_level}. "
@@ -218,12 +223,14 @@ async def generate_initiative_ping(
     gap_hours: float,
     memory_snippets: list[str] | None = None,
     conversation_transcript: str | None = None,
+    language_adaptation_context: str | None = None,
 ) -> str:
     """Исходящая реплика без входящего сообщения пользователя (пауза в диалоге)."""
     client = get_openai_client()
     settings = get_settings()
     system = _identity_system_prompt(nf, core)
     system = extend_llm_system_prompt(system, core, rel, state)
+    system = extend_llm_language_adaptation_prompt(system, language_adaptation_context)
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог (опирайся на смысл; сейчас ты пишешь первым после паузы):\n"
@@ -306,12 +313,14 @@ async def generate_repair_ping(
     conversation_transcript: str | None = None,
     conflict_peak: float = 0.0,
     readiness: float = 0.0,
+    language_adaptation_context: str | None = None,
 ) -> str:
     """Инициатива восстановления контакта после конфликта (v4.4)."""
     client = get_openai_client()
     settings = get_settings()
     system = _identity_system_prompt(nf, core)
     system = extend_llm_system_prompt(system, core, rel, state)
+    system = extend_llm_language_adaptation_prompt(system, language_adaptation_context)
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог (есть напряжённый контекст; пиши первым после паузы):\n"
@@ -374,12 +383,14 @@ async def generate_event_followup_ping(
     reminder_hint: str | None,
     memory_snippets: list[str] | None = None,
     conversation_transcript: str | None = None,
+    language_adaptation_context: str | None = None,
 ) -> str:
     """Исходящее напоминание по отслеживаемому событию пользователя."""
     client = get_openai_client()
     settings = get_settings()
     system = _identity_system_prompt(nf, core)
     system = extend_llm_system_prompt(system, core, rel, state)
+    system = extend_llm_language_adaptation_prompt(system, language_adaptation_context)
     if conversation_transcript and conversation_transcript.strip():
         system += (
             "\n\nНедавний диалог:\n"

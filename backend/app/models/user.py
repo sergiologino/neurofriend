@@ -12,6 +12,7 @@ from app.core.datetimeutil import utc_naive_now
 
 if TYPE_CHECKING:
     from app.models.neurofriend import NeuroFriendProfile
+    from app.models.language_adaptation import UserDomainProfile, UserLanguageProfile
 
 
 class User(Base):
@@ -25,3 +26,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(default=utc_naive_now)
 
     neurofriends: Mapped[list[NeuroFriendProfile]] = relationship(back_populates="user")
+    language_profile: Mapped["UserLanguageProfile | None"] = relationship(
+        back_populates="user",
+        uselist=False,
+    )
+    domain_profiles: Mapped[list["UserDomainProfile"]] = relationship(back_populates="user")

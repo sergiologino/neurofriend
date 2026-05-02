@@ -91,6 +91,15 @@ class Settings(BaseSettings):
     )
     tracked_event_reminders_enabled: bool = Field(default=True, description="Напоминания из подтверждённых tracked events.")
 
+    # Addendum v4.6 — язык и профессиональный контекст пользователя
+    language_adaptation_enabled: bool = Field(
+        default=True,
+        description="Профиль речи пользователя, домены, мягкая подстройка промпта LLM.",
+    )
+    profession_detection_enabled: bool = Field(default=True, description="Эвристики домена/профессии и накопление user_domain_profiles.")
+    domain_lexicon_enabled: bool = Field(default=True, description="Подмешивать доменную лексику в контекст LLM (при уверенности).")
+    contextual_jargon_enabled: bool = Field(default=True, description="Учитывать связки/жаргон пользователя в блоке адаптации.")
+
 
 @lru_cache
 def get_settings() -> Settings:

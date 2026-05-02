@@ -3,6 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -10,6 +12,9 @@ from app.core.database import Base
 from app.core.datetimeutil import utc_naive_now
 from app.core.types import jsonb_type
 from app.models.user import User
+
+if TYPE_CHECKING:
+    from app.models.language_adaptation import SocialLearningProfile
 
 
 class NeuroFriendProfile(Base):
@@ -31,6 +36,10 @@ class NeuroFriendProfile(Base):
 
     user: Mapped["User"] = relationship(back_populates="neurofriends")
     identity_core: Mapped["IdentityCore | None"] = relationship(back_populates="neurofriend", uselist=False)
+    social_learning_profile: Mapped["SocialLearningProfile | None"] = relationship(
+        back_populates="neurofriend",
+        uselist=False,
+    )
 
 
 class IdentityCore(Base):
